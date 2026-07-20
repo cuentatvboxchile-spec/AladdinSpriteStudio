@@ -1,3 +1,4 @@
+using AladdinSpriteStudio.UI.Controls;
 using AladdinSpriteStudio.UI.Core;
 using AladdinSpriteStudio.UI.Graphics;
 
@@ -9,18 +10,45 @@ public partial class MainForm : Form
     private RomHeader? _currentHeader;
 
     private readonly MenuStrip _menu;
-
+    private readonly TileViewer _tileViewer;
     public MainForm()
     {
         InitializeComponent();
 
-#if DEBUG
+        #if DEBUG
         if (!Decoder4Bpp.RunSelfTest())
         {
             throw new InvalidOperationException(
                 "La prueba del decodificador 4BPP falló.");
         }
+        #endif
+
+                  _tileViewer = new TileViewer
+        {
+            Zoom = 32,
+            ShowGrid = true,
+            Location = new Point(24, 24)
+        };
+
+        mainSplitContainer.Panel2.AutoScroll = true;
+        mainSplitContainer.Panel2.Controls.Add(_tileViewer);
+
+#if DEBUG
+        byte[,] previewPixels = new byte[8, 8];
+
+        for (int row = 0; row < 8; row++)
+        {
+            for (int column = 0; column < 8; column++)
+            {
+                previewPixels[row, column] =
+                    (byte)((row * 2 + column) % 16);
+            }
+        }
+
+        _tileViewer.Pixels = previewPixels;
 #endif
+
+
 
         Text = "Aladdin Sprite Studio";
         Width = 1400;
