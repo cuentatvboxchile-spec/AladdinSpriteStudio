@@ -6,10 +6,6 @@
 /// </summary>
 public sealed class TileViewer : Control
 {
-    private byte[,]? _pixels;
-    private int _zoom = 24;
-    private bool _showGrid = true;
-
     private static readonly Color[] DefaultPalette =
     [
         Color.Black,
@@ -29,6 +25,14 @@ public sealed class TileViewer : Control
         Color.FromArgb(244, 244, 244),
         Color.White
     ];
+
+    private byte[,]? _pixels;
+
+    private Color[] _palette =
+        (Color[])DefaultPalette.Clone();
+
+    private int _zoom = 24;
+    private bool _showGrid = true;
 
     public TileViewer()
     {
@@ -51,6 +55,7 @@ public sealed class TileViewer : Control
     public byte[,]? Pixels
     {
         get => _pixels;
+
         set
         {
             if (value is not null &&
@@ -71,11 +76,36 @@ public sealed class TileViewer : Control
     }
 
     /// <summary>
+    /// Paleta de 16 colores utilizada para dibujar el tile.
+    /// </summary>
+    public Color[] Palette
+    {
+        get => (Color[])_palette.Clone();
+
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+
+            if (value.Length != 16)
+            {
+                throw new ArgumentException(
+                    "La paleta debe contener exactamente 16 colores.",
+                    nameof(value));
+            }
+
+            _palette = (Color[])value.Clone();
+
+            Invalidate();
+        }
+    }
+
+    /// <summary>
     /// Tamaño visual de cada píxel del tile.
     /// </summary>
     public int Zoom
     {
         get => _zoom;
+
         set
         {
             if (value is < 2 or > 64)
@@ -98,11 +128,23 @@ public sealed class TileViewer : Control
     public bool ShowGrid
     {
         get => _showGrid;
+
         set
         {
             _showGrid = value;
             Invalidate();
         }
+    }
+
+    /// <summary>
+    /// Restablece la paleta provisional en escala de grises.
+    /// </summary>
+    public void ResetPalette()
+    {
+        _palette =
+            (Color[])DefaultPalette.Clone();
+
+        Invalidate();
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -127,12 +169,16 @@ public sealed class TileViewer : Control
         {
             for (int column = 0; column < 8; column++)
             {
-                byte colorIndex = _pixels[row, column];
+                byte colorIndex =
+                    _pixels[row, column];
 
-                Color color = DefaultPalette[
-                    Math.Min(colorIndex, (byte)15)];
+                Color color =
+                    _palette[Math.Min(
+                        colorIndex,
+                        (byte)15)];
 
-                using SolidBrush brush = new(color);
+                using SolidBrush brush =
+                    new(color);
 
                 Rectangle pixelRectangle = new(
                     column * _zoom,

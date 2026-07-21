@@ -8,13 +8,19 @@ public partial class MainForm : Form
 {
     private Rom? _currentRom;
     private RomHeader? _currentHeader;
+    private int? _currentPaletteOffset;
 
     private readonly MenuStrip _menu;
     private readonly TileViewer _tileViewer;
+
     private readonly NumericUpDown _tileOffsetInput;
     private readonly Button _showTileButton;
     private readonly Button _previousTileButton;
     private readonly Button _nextTileButton;
+
+    private readonly NumericUpDown _paletteOffsetInput;
+    private readonly Button _loadPaletteButton;
+    private readonly Button _resetPaletteButton;
 
     public MainForm()
     {
@@ -28,6 +34,7 @@ public partial class MainForm : Form
         }
 #endif
 
+        // Visor del tile.
         _tileViewer = new TileViewer
         {
             Zoom = 32,
@@ -38,6 +45,7 @@ public partial class MainForm : Form
         mainSplitContainer.Panel2.AutoScroll = true;
         mainSplitContainer.Panel2.Controls.Add(_tileViewer);
 
+        // Selector del offset del tile.
         _tileOffsetInput = new NumericUpDown
         {
             Hexadecimal = true,
@@ -83,6 +91,45 @@ public partial class MainForm : Form
         navigationButtonsPanel.Controls.Add(_previousTileButton);
         navigationButtonsPanel.Controls.Add(_nextTileButton);
 
+        // Selector del offset de la paleta.
+        _paletteOffsetInput = new NumericUpDown
+        {
+            Hexadecimal = true,
+            Minimum = 0,
+            Maximum = 0,
+            Increment = SnesPalette.BytesPerPalette,
+            Width = 150,
+            Enabled = false
+        };
+
+        _loadPaletteButton = new Button
+        {
+            Text = "Cargar paleta",
+            AutoSize = true,
+            Enabled = false
+        };
+
+        _resetPaletteButton = new Button
+        {
+            Text = "Usar escala de grises",
+            AutoSize = true,
+            Enabled = false
+        };
+
+        _loadPaletteButton.Click += LoadPaletteButton_Click;
+        _resetPaletteButton.Click += ResetPaletteButton_Click;
+
+        FlowLayoutPanel paletteButtonsPanel = new()
+        {
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false
+        };
+
+        paletteButtonsPanel.Controls.Add(_loadPaletteButton);
+        paletteButtonsPanel.Controls.Add(_resetPaletteButton);
+
+        // Panel izquierdo con los controles.
         FlowLayoutPanel tileControlsPanel = new()
         {
             Dock = DockStyle.Top,
@@ -103,21 +150,32 @@ public partial class MainForm : Form
         tileControlsPanel.Controls.Add(_showTileButton);
         tileControlsPanel.Controls.Add(navigationButtonsPanel);
 
+        tileControlsPanel.Controls.Add(
+            new Label
+            {
+                Text = "Offset de paleta hexadecimal:",
+                AutoSize = true,
+                Margin = new Padding(3, 18, 3, 3)
+            });
+
+        tileControlsPanel.Controls.Add(_paletteOffsetInput);
+        tileControlsPanel.Controls.Add(paletteButtonsPanel);
+
         mainSplitContainer.Panel1.Controls.Add(tileControlsPanel);
 
+        // Configuración de la ventana.
         Text = "Aladdin Sprite Studio";
         Width = 1400;
         Height = 900;
         StartPosition = FormStartPosition.CenterScreen;
-
         DoubleBuffered = true;
 
+        // Menú principal.
         _menu = new MenuStrip();
 
         BuildMenu();
 
         Controls.Add(_menu);
-
         MainMenuStrip = _menu;
     }
 
@@ -169,6 +227,62 @@ public partial class MainForm : Form
             Decoder4Bpp.BytesPerTile);
     }
 
+    private void LoadPaletteButton_Click(
+        object? sender,
+        EventArgs e)
+    {
+        if (_currentRom is null)
+        {
+            return;
+        }
+
+        try
+        {
+            int paletteOffset =
+                decimal.ToInt32(
+                    _paletteOffsetInput.Value);
+
+            Color[] palette =
+                SnesPalette.DecodePalette(
+                    _currentRom.Data,
+                    paletteOffset);
+
+            _tileViewer.Palette = palette;
+            _currentPaletteOffset = paletteOffset;
+
+            int tileOffset =
+                decimal.ToInt32(
+                    _tileOffsetInput.Value);
+
+            UpdateStatus(tileOffset);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                ex.Message,
+                "Error al cargar la paleta",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
+
+    private void ResetPaletteButton_Click(
+        object? sender,
+        EventArgs e)
+    {
+        _tileViewer.ResetPalette();
+        _currentPaletteOffset = null;
+
+        if (_currentRom is not null)
+        {
+            int tileOffset =
+                decimal.ToInt32(
+                    _tileOffsetInput.Value);
+
+            UpdateStatus(tileOffset);
+        }
+    }
+
     private void MoveTileOffset(int amount)
     {
         if (_currentRom is null)
@@ -177,10 +291,12 @@ public partial class MainForm : Form
         }
 
         int currentOffset =
-            decimal.ToInt32(_tileOffsetInput.Value);
+            decimal.ToInt32(
+                _tileOffsetInput.Value);
 
         int maximumOffset =
-            decimal.ToInt32(_tileOffsetInput.Maximum);
+            decimal.ToInt32(
+                _tileOffsetInput.Maximum);
 
         int newOffset = Math.Clamp(
             currentOffset + amount,
@@ -203,10 +319,12 @@ public partial class MainForm : Form
         }
 
         int currentOffset =
-            decimal.ToInt32(_tileOffsetInput.Value);
+            decimal.ToInt32(
+                _tileOffsetInput.Value);
 
         int maximumOffset =
-            decimal.ToInt32(_tileOffsetInput.Maximum);
+            decimal.ToInt32(
+                _tileOffsetInput.Maximum);
 
         _previousTileButton.Enabled =
             currentOffset > 0;
@@ -222,29 +340,49 @@ public partial class MainForm : Form
             return;
         }
 
-        byte[,] pixels = Decoder4Bpp.DecodeTile(
-            _currentRom.Data,
-            offset);
+        byte[,] pixels =
+            Decoder4Bpp.DecodeTile(
+                _currentRom.Data,
+                offset);
 
         _tileViewer.Pixels = pixels;
 
+        UpdateStatus(offset);
+        UpdateTileNavigationButtons();
+    }
+
+    private void UpdateStatus(int tileOffset)
+    {
+        if (_currentRom is null)
+        {
+            return;
+        }
+
         string fileName =
-            Path.GetFileName(_currentRom.FileName);
+            Path.GetFileName(
+                _currentRom.FileName);
 
         string mapping =
-            _currentHeader?.MappingName ?? "Desconocido";
+            _currentHeader?.MappingName
+            ?? "Desconocido";
 
         int tileNumber =
-            offset / Decoder4Bpp.BytesPerTile;
+            tileOffset /
+            Decoder4Bpp.BytesPerTile;
+
+        string paletteInformation =
+            _currentPaletteOffset
+                is int paletteOffset
+                ? $"Paleta: 0x{paletteOffset:X}"
+                : "Paleta: escala de grises";
 
         statusLabelMain.Text =
             $"ROM: {fileName} | " +
             $"{mapping} | " +
             $"{_currentRom.Size:N0} bytes | " +
             $"Tile #{tileNumber:N0} | " +
-            $"Offset: 0x{offset:X}";
-
-        UpdateTileNavigationButtons();
+            $"Offset: 0x{tileOffset:X} | " +
+            paletteInformation;
     }
 
     private void AbrirRom_Click(
@@ -256,24 +394,54 @@ public partial class MainForm : Form
         dialog.Filter =
             "SNES ROM (*.sfc;*.smc)|*.sfc;*.smc";
 
-        if (dialog.ShowDialog() != DialogResult.OK)
+        if (dialog.ShowDialog() !=
+            DialogResult.OK)
         {
             return;
         }
 
         try
         {
-            _currentRom = RomLoader.Load(
-                dialog.FileName);
+            _currentRom =
+                RomLoader.Load(
+                    dialog.FileName);
 
             RomHeader header =
-                HeaderReader.Read(_currentRom.Data);
+                HeaderReader.Read(
+                    _currentRom.Data);
 
             _currentHeader = header;
 
             string fileName =
-                Path.GetFileName(_currentRom.FileName);
+                Path.GetFileName(
+                    _currentRom.FileName);
 
+            // Restablecer la paleta inicial.
+            _currentPaletteOffset = null;
+            _tileViewer.ResetPalette();
+
+            // Configurar selector de paleta.
+            int maximumPaletteOffset =
+                _currentRom.Data.Length -
+                SnesPalette.BytesPerPalette;
+
+            if (maximumPaletteOffset >= 0)
+            {
+                int maximumAlignedPaletteOffset =
+                    maximumPaletteOffset -
+                    (maximumPaletteOffset %
+                     SnesPalette.BytesPerColor);
+
+                _paletteOffsetInput.Maximum =
+                    maximumAlignedPaletteOffset;
+
+                _paletteOffsetInput.Value = 0;
+                _paletteOffsetInput.Enabled = true;
+                _loadPaletteButton.Enabled = true;
+                _resetPaletteButton.Enabled = true;
+            }
+
+            // Configurar selector de tiles.
             int maximumOffset =
                 _currentRom.Data.Length -
                 Decoder4Bpp.BytesPerTile;
@@ -296,7 +464,8 @@ public partial class MainForm : Form
             }
 
             Text =
-                $"Aladdin Sprite Studio - {fileName}";
+                $"Aladdin Sprite Studio - " +
+                $"{fileName}";
 
             MessageBox.Show(
                 $"ROM cargada correctamente.\n\n" +
@@ -316,7 +485,8 @@ public partial class MainForm : Form
                 $"Código de región: " +
                 $"0x{header.CountryCode:X2}\n" +
                 $"Versión: {header.Version}\n" +
-                $"Checksum: 0x{header.Checksum:X4}\n" +
+                $"Checksum: " +
+                $"0x{header.Checksum:X4}\n" +
                 $"Complemento: " +
                 $"0x{header.ChecksumComplement:X4}\n" +
                 $"Checksum y complemento coherentes: " +
@@ -329,13 +499,22 @@ public partial class MainForm : Form
         {
             _currentRom = null;
             _currentHeader = null;
+            _currentPaletteOffset = null;
 
             _tileOffsetInput.Enabled = false;
             _showTileButton.Enabled = false;
             _previousTileButton.Enabled = false;
             _nextTileButton.Enabled = false;
 
+            _paletteOffsetInput.Enabled = false;
+            _loadPaletteButton.Enabled = false;
+            _resetPaletteButton.Enabled = false;
+
             _tileViewer.Pixels = null;
+            _tileViewer.ResetPalette();
+
+            statusLabelMain.Text =
+                "Sin ROM cargada";
 
             MessageBox.Show(
                 ex.Message,
