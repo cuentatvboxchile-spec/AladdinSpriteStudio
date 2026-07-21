@@ -11,16 +11,25 @@ public partial class MainForm : Form
     private int? _currentPaletteOffset;
 
     private readonly MenuStrip _menu;
-    private readonly TileViewer _tileViewer;
 
+    // Visor individual.
+    private readonly TileViewer _tileViewer;
     private readonly NumericUpDown _tileOffsetInput;
     private readonly Button _showTileButton;
     private readonly Button _previousTileButton;
     private readonly Button _nextTileButton;
 
+    // Paleta.
     private readonly NumericUpDown _paletteOffsetInput;
     private readonly Button _loadPaletteButton;
     private readonly Button _resetPaletteButton;
+
+    // Hoja de 256 tiles.
+    private readonly TileSheetViewer _tileSheetViewer;
+    private readonly NumericUpDown _sheetOffsetInput;
+    private readonly Button _showSheetButton;
+    private readonly Button _previousSheetButton;
+    private readonly Button _nextSheetButton;
 
     public MainForm()
     {
@@ -34,25 +43,85 @@ public partial class MainForm : Form
         }
 #endif
 
-        // Visor del tile.
+        Text = "Aladdin Sprite Studio";
+        Width = 1400;
+        Height = 900;
+        StartPosition = FormStartPosition.CenterScreen;
+        DoubleBuffered = true;
+
+        mainSplitContainer.SplitterDistance = 310;
+
+        // =====================================================
+        // VISOR INDIVIDUAL
+        // =====================================================
+
         _tileViewer = new TileViewer
         {
             Zoom = 32,
             ShowGrid = true,
-            Location = new Point(24, 24)
+            Location = new Point(24, 40)
+        };
+
+        Label individualViewerLabel = new()
+        {
+            Text = "Tile individual",
+            AutoSize = true,
+            Location = new Point(24, 16),
+            Font = new Font(
+                Font,
+                FontStyle.Bold)
+        };
+
+        // =====================================================
+        // VISOR DE HOJA DE TILES
+        // =====================================================
+
+        _tileSheetViewer = new TileSheetViewer
+        {
+            Columns = 16,
+            Rows = 16,
+            Zoom = 4,
+            ShowTileGrid = true,
+            Location = new Point(24, 350)
+        };
+           _tileSheetViewer.TileSelected +=
+            TileSheetViewer_TileSelected;
+
+        Label sheetViewerLabel = new()
+        {
+            Text = "Hoja de tiles (16 × 16)",
+            AutoSize = true,
+            Location = new Point(24, 325),
+            Font = new Font(
+                Font,
+                FontStyle.Bold)
         };
 
         mainSplitContainer.Panel2.AutoScroll = true;
-        mainSplitContainer.Panel2.Controls.Add(_tileViewer);
 
-        // Selector del offset del tile.
+        mainSplitContainer.Panel2.Controls.Add(
+            individualViewerLabel);
+
+        mainSplitContainer.Panel2.Controls.Add(
+            _tileViewer);
+
+        mainSplitContainer.Panel2.Controls.Add(
+            sheetViewerLabel);
+
+        mainSplitContainer.Panel2.Controls.Add(
+            _tileSheetViewer);
+
+        // =====================================================
+        // CONTROLES DEL TILE INDIVIDUAL
+        // =====================================================
+
         _tileOffsetInput = new NumericUpDown
         {
             Hexadecimal = true,
             Minimum = 0,
             Maximum = 0,
             Increment = Decoder4Bpp.BytesPerTile,
-            Width = 150,
+            Width = 160,
             Enabled = false
         };
 
@@ -77,28 +146,40 @@ public partial class MainForm : Form
             Enabled = false
         };
 
-        _showTileButton.Click += ShowTileButton_Click;
-        _previousTileButton.Click += PreviousTileButton_Click;
-        _nextTileButton.Click += NextTileButton_Click;
+        _showTileButton.Click +=
+            ShowTileButton_Click;
 
-        FlowLayoutPanel navigationButtonsPanel = new()
+        _previousTileButton.Click +=
+            PreviousTileButton_Click;
+
+        _nextTileButton.Click +=
+            NextTileButton_Click;
+
+        FlowLayoutPanel tileNavigationPanel = new()
         {
             AutoSize = true,
-            FlowDirection = FlowDirection.LeftToRight,
+            FlowDirection =
+                FlowDirection.LeftToRight,
             WrapContents = false
         };
 
-        navigationButtonsPanel.Controls.Add(_previousTileButton);
-        navigationButtonsPanel.Controls.Add(_nextTileButton);
+        tileNavigationPanel.Controls.Add(
+            _previousTileButton);
 
-        // Selector del offset de la paleta.
+        tileNavigationPanel.Controls.Add(
+            _nextTileButton);
+
+        // =====================================================
+        // CONTROLES DE PALETA
+        // =====================================================
+
         _paletteOffsetInput = new NumericUpDown
         {
             Hexadecimal = true,
             Minimum = 0,
             Maximum = 0,
             Increment = SnesPalette.BytesPerPalette,
-            Width = 150,
+            Width = 160,
             Enabled = false
         };
 
@@ -116,61 +197,153 @@ public partial class MainForm : Form
             Enabled = false
         };
 
-        _loadPaletteButton.Click += LoadPaletteButton_Click;
-        _resetPaletteButton.Click += ResetPaletteButton_Click;
+        _loadPaletteButton.Click +=
+            LoadPaletteButton_Click;
+
+        _resetPaletteButton.Click +=
+            ResetPaletteButton_Click;
 
         FlowLayoutPanel paletteButtonsPanel = new()
         {
             AutoSize = true,
-            FlowDirection = FlowDirection.LeftToRight,
+            FlowDirection =
+                FlowDirection.TopDown,
             WrapContents = false
         };
 
-        paletteButtonsPanel.Controls.Add(_loadPaletteButton);
-        paletteButtonsPanel.Controls.Add(_resetPaletteButton);
+        paletteButtonsPanel.Controls.Add(
+            _loadPaletteButton);
 
-        // Panel izquierdo con los controles.
-        FlowLayoutPanel tileControlsPanel = new()
+        paletteButtonsPanel.Controls.Add(
+            _resetPaletteButton);
+
+        // =====================================================
+        // CONTROLES DE LA HOJA DE TILES
+        // =====================================================
+
+        _sheetOffsetInput = new NumericUpDown
+        {
+            Hexadecimal = true,
+            Minimum = 0,
+            Maximum = 0,
+            Increment = 0x2000,
+            Width = 160,
+            Enabled = false
+        };
+
+        _showSheetButton = new Button
+        {
+            Text = "Mostrar hoja",
+            AutoSize = true,
+            Enabled = false
+        };
+
+        _previousSheetButton = new Button
+        {
+            Text = "◀ Página anterior",
+            AutoSize = true,
+            Enabled = false
+        };
+
+        _nextSheetButton = new Button
+        {
+            Text = "Página siguiente ▶",
+            AutoSize = true,
+            Enabled = false
+        };
+
+        _showSheetButton.Click +=
+            ShowSheetButton_Click;
+
+        _previousSheetButton.Click +=
+            PreviousSheetButton_Click;
+
+        _nextSheetButton.Click +=
+            NextSheetButton_Click;
+
+        FlowLayoutPanel sheetNavigationPanel = new()
+        {
+            AutoSize = true,
+            FlowDirection =
+                FlowDirection.TopDown,
+            WrapContents = false
+        };
+
+        sheetNavigationPanel.Controls.Add(
+            _previousSheetButton);
+
+        sheetNavigationPanel.Controls.Add(
+            _nextSheetButton);
+
+        // =====================================================
+        // PANEL IZQUIERDO
+        // =====================================================
+
+        FlowLayoutPanel controlsPanel = new()
         {
             Dock = DockStyle.Top,
             AutoSize = true,
-            FlowDirection = FlowDirection.TopDown,
+            FlowDirection =
+                FlowDirection.TopDown,
             WrapContents = false,
             Padding = new Padding(12)
         };
 
-        tileControlsPanel.Controls.Add(
-            new Label
-            {
-                Text = "Offset ROM hexadecimal:",
-                AutoSize = true
-            });
+        controlsPanel.Controls.Add(
+            CreateSectionLabel(
+                "Tile individual"));
 
-        tileControlsPanel.Controls.Add(_tileOffsetInput);
-        tileControlsPanel.Controls.Add(_showTileButton);
-        tileControlsPanel.Controls.Add(navigationButtonsPanel);
+        controlsPanel.Controls.Add(
+            CreateNormalLabel(
+                "Offset ROM hexadecimal:"));
 
-        tileControlsPanel.Controls.Add(
-            new Label
-            {
-                Text = "Offset de paleta hexadecimal:",
-                AutoSize = true,
-                Margin = new Padding(3, 18, 3, 3)
-            });
+        controlsPanel.Controls.Add(
+            _tileOffsetInput);
 
-        tileControlsPanel.Controls.Add(_paletteOffsetInput);
-        tileControlsPanel.Controls.Add(paletteButtonsPanel);
+        controlsPanel.Controls.Add(
+            _showTileButton);
 
-        mainSplitContainer.Panel1.Controls.Add(tileControlsPanel);
+        controlsPanel.Controls.Add(
+            tileNavigationPanel);
 
-        // Configuración de la ventana.
-        Text = "Aladdin Sprite Studio";
-        Width = 1400;
-        Height = 900;
-        StartPosition = FormStartPosition.CenterScreen;
-        DoubleBuffered = true;
+        controlsPanel.Controls.Add(
+            CreateSectionLabel(
+                "Paleta de colores"));
 
-        // Menú principal.
+        controlsPanel.Controls.Add(
+            CreateNormalLabel(
+                "Offset de paleta hexadecimal:"));
+
+        controlsPanel.Controls.Add(
+            _paletteOffsetInput);
+
+        controlsPanel.Controls.Add(
+            paletteButtonsPanel);
+
+        controlsPanel.Controls.Add(
+            CreateSectionLabel(
+                "Hoja de tiles"));
+
+        controlsPanel.Controls.Add(
+            CreateNormalLabel(
+                "Offset inicial hexadecimal:"));
+
+        controlsPanel.Controls.Add(
+            _sheetOffsetInput);
+
+        controlsPanel.Controls.Add(
+            _showSheetButton);
+
+        controlsPanel.Controls.Add(
+            sheetNavigationPanel);
+
+        mainSplitContainer.Panel1.Controls.Add(
+            controlsPanel);
+
+        // =====================================================
+        // MENÚ
+        // =====================================================
+
         _menu = new MenuStrip();
 
         BuildMenu();
@@ -179,16 +352,54 @@ public partial class MainForm : Form
         MainMenuStrip = _menu;
     }
 
+    private Label CreateSectionLabel(
+        string text)
+    {
+        return new Label
+        {
+            Text = text,
+            AutoSize = true,
+            Font = new Font(
+                Font,
+                FontStyle.Bold),
+            Margin = new Padding(
+                3,
+                18,
+                3,
+                5)
+        };
+    }
+
+    private static Label CreateNormalLabel(
+        string text)
+    {
+        return new Label
+        {
+            Text = text,
+            AutoSize = true
+        };
+    }
+
     private void BuildMenu()
     {
-        var archivo = new ToolStripMenuItem("Archivo");
-        var abrirRom = new ToolStripMenuItem("Abrir ROM");
+        ToolStripMenuItem archivo =
+            new("Archivo");
+
+        ToolStripMenuItem abrirRom =
+            new("Abrir ROM");
 
         abrirRom.Click += AbrirRom_Click;
 
-        archivo.DropDownItems.Add(abrirRom);
-        _menu.Items.Add(archivo);
+        archivo.DropDownItems.Add(
+            abrirRom);
+
+        _menu.Items.Add(
+            archivo);
     }
+
+    // =========================================================
+    // TILE INDIVIDUAL
+    // =========================================================
 
     private void ShowTileButton_Click(
         object? sender,
@@ -205,8 +416,9 @@ public partial class MainForm : Form
             return;
         }
 
-        int offset = decimal.ToInt32(
-            _tileOffsetInput.Value);
+        int offset =
+            decimal.ToInt32(
+                _tileOffsetInput.Value);
 
         ShowTileAtOffset(offset);
     }
@@ -227,63 +439,8 @@ public partial class MainForm : Form
             Decoder4Bpp.BytesPerTile);
     }
 
-    private void LoadPaletteButton_Click(
-        object? sender,
-        EventArgs e)
-    {
-        if (_currentRom is null)
-        {
-            return;
-        }
-
-        try
-        {
-            int paletteOffset =
-                decimal.ToInt32(
-                    _paletteOffsetInput.Value);
-
-            Color[] palette =
-                SnesPalette.DecodePalette(
-                    _currentRom.Data,
-                    paletteOffset);
-
-            _tileViewer.Palette = palette;
-            _currentPaletteOffset = paletteOffset;
-
-            int tileOffset =
-                decimal.ToInt32(
-                    _tileOffsetInput.Value);
-
-            UpdateStatus(tileOffset);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(
-                ex.Message,
-                "Error al cargar la paleta",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
-        }
-    }
-
-    private void ResetPaletteButton_Click(
-        object? sender,
-        EventArgs e)
-    {
-        _tileViewer.ResetPalette();
-        _currentPaletteOffset = null;
-
-        if (_currentRom is not null)
-        {
-            int tileOffset =
-                decimal.ToInt32(
-                    _tileOffsetInput.Value);
-
-            UpdateStatus(tileOffset);
-        }
-    }
-
-    private void MoveTileOffset(int amount)
+    private void MoveTileOffset(
+        int amount)
     {
         if (_currentRom is null)
         {
@@ -298,14 +455,39 @@ public partial class MainForm : Form
             decimal.ToInt32(
                 _tileOffsetInput.Maximum);
 
-        int newOffset = Math.Clamp(
-            currentOffset + amount,
-            0,
-            maximumOffset);
+        int newOffset =
+            Math.Clamp(
+                currentOffset + amount,
+                0,
+                maximumOffset);
 
-        _tileOffsetInput.Value = newOffset;
+        _tileOffsetInput.Value =
+            newOffset;
 
-        ShowTileAtOffset(newOffset);
+        ShowTileAtOffset(
+            newOffset);
+    }
+
+    private void ShowTileAtOffset(
+        int offset)
+    {
+        if (_currentRom is null)
+        {
+            return;
+        }
+
+        byte[,] pixels =
+            Decoder4Bpp.DecodeTile(
+                _currentRom.Data,
+                offset);
+
+        _tileViewer.Pixels =
+            pixels;
+
+        UpdateTileStatus(
+            offset);
+
+        UpdateTileNavigationButtons();
     }
 
     private void UpdateTileNavigationButtons()
@@ -333,25 +515,235 @@ public partial class MainForm : Form
             currentOffset < maximumOffset;
     }
 
-    private void ShowTileAtOffset(int offset)
+    private void TileSheetViewer_TileSelected(
+    object? sender,
+    TileSelectedEventArgs e)
     {
         if (_currentRom is null)
         {
             return;
         }
 
-        byte[,] pixels =
-            Decoder4Bpp.DecodeTile(
-                _currentRom.Data,
-                offset);
+        int maximumOffset =
+            decimal.ToInt32(
+                _tileOffsetInput.Maximum);
 
-        _tileViewer.Pixels = pixels;
+        int selectedOffset =
+            Math.Clamp(
+                e.Offset,
+                0,
+                maximumOffset);
 
-        UpdateStatus(offset);
-        UpdateTileNavigationButtons();
+        _tileOffsetInput.Value =
+            selectedOffset;
+
+        ShowTileAtOffset(
+            selectedOffset);
     }
 
-    private void UpdateStatus(int tileOffset)
+    // =========================================================
+    // PALETA
+    // =========================================================
+
+    private void LoadPaletteButton_Click(
+        object? sender,
+        EventArgs e)
+    {
+        if (_currentRom is null)
+        {
+            return;
+        }
+
+        try
+        {
+            int paletteOffset =
+                decimal.ToInt32(
+                    _paletteOffsetInput.Value);
+
+            Color[] palette =
+                SnesPalette.DecodePalette(
+                    _currentRom.Data,
+                    paletteOffset);
+
+            _tileViewer.Palette =
+                palette;
+
+            _tileSheetViewer.Palette =
+                palette;
+
+            _currentPaletteOffset =
+                paletteOffset;
+
+            int tileOffset =
+                decimal.ToInt32(
+                    _tileOffsetInput.Value);
+
+            UpdateTileStatus(
+                tileOffset);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                ex.Message,
+                "Error al cargar la paleta",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
+
+    private void ResetPaletteButton_Click(
+        object? sender,
+        EventArgs e)
+    {
+        _tileViewer.ResetPalette();
+        _tileSheetViewer.ResetPalette();
+
+        _currentPaletteOffset = null;
+
+        if (_currentRom is not null)
+        {
+            int tileOffset =
+                decimal.ToInt32(
+                    _tileOffsetInput.Value);
+
+            UpdateTileStatus(
+                tileOffset);
+        }
+    }
+
+    // =========================================================
+    // HOJA DE TILES
+    // =========================================================
+
+    private void ShowSheetButton_Click(
+        object? sender,
+        EventArgs e)
+    {
+        if (_currentRom is null)
+        {
+            return;
+        }
+
+        int offset =
+            decimal.ToInt32(
+                _sheetOffsetInput.Value);
+
+        ShowSheetAtOffset(
+            offset);
+    }
+
+    private void PreviousSheetButton_Click(
+        object? sender,
+        EventArgs e)
+    {
+        MoveSheetOffset(
+            -_tileSheetViewer.BytesPerPage);
+    }
+
+    private void NextSheetButton_Click(
+        object? sender,
+        EventArgs e)
+    {
+        MoveSheetOffset(
+            _tileSheetViewer.BytesPerPage);
+    }
+
+    private void MoveSheetOffset(
+        int amount)
+    {
+        if (_currentRom is null)
+        {
+            return;
+        }
+
+        int currentOffset =
+            decimal.ToInt32(
+                _sheetOffsetInput.Value);
+
+        int maximumOffset =
+            decimal.ToInt32(
+                _sheetOffsetInput.Maximum);
+
+        int newOffset =
+            Math.Clamp(
+                currentOffset + amount,
+                0,
+                maximumOffset);
+
+        newOffset -=
+            newOffset %
+            Decoder4Bpp.BytesPerTile;
+
+        _sheetOffsetInput.Value =
+            newOffset;
+
+        ShowSheetAtOffset(
+            newOffset);
+    }
+
+    private void ShowSheetAtOffset(
+        int offset)
+    {
+        if (_currentRom is null)
+        {
+            return;
+        }
+
+        _tileSheetViewer.StartOffset =
+            offset;
+
+        _tileSheetViewer.Invalidate();
+
+        UpdateSheetNavigationButtons();
+
+        int firstTileNumber =
+            offset /
+            Decoder4Bpp.BytesPerTile;
+
+        string paletteInformation =
+            _currentPaletteOffset
+                is int paletteOffset
+                ? $"Paleta: 0x{paletteOffset:X}"
+                : "Paleta: escala de grises";
+
+        statusLabelMain.Text =
+            $"Hoja de tiles | " +
+            $"Primer tile: #{firstTileNumber:N0} | " +
+            $"Offset inicial: 0x{offset:X} | " +
+            paletteInformation;
+    }
+
+    private void UpdateSheetNavigationButtons()
+    {
+        if (_currentRom is null)
+        {
+            _previousSheetButton.Enabled = false;
+            _nextSheetButton.Enabled = false;
+
+            return;
+        }
+
+        int currentOffset =
+            decimal.ToInt32(
+                _sheetOffsetInput.Value);
+
+        int maximumOffset =
+            decimal.ToInt32(
+                _sheetOffsetInput.Maximum);
+
+        _previousSheetButton.Enabled =
+            currentOffset > 0;
+
+        _nextSheetButton.Enabled =
+            currentOffset < maximumOffset;
+    }
+
+    // =========================================================
+    // ESTADO
+    // =========================================================
+
+    private void UpdateTileStatus(
+        int tileOffset)
     {
         if (_currentRom is null)
         {
@@ -385,11 +777,16 @@ public partial class MainForm : Form
             paletteInformation;
     }
 
+    // =========================================================
+    // ABRIR ROM
+    // =========================================================
+
     private void AbrirRom_Click(
         object? sender,
         EventArgs e)
     {
-        using OpenFileDialog dialog = new();
+        using OpenFileDialog dialog =
+            new();
 
         dialog.Filter =
             "SNES ROM (*.sfc;*.smc)|*.sfc;*.smc";
@@ -410,86 +807,94 @@ public partial class MainForm : Form
                 HeaderReader.Read(
                     _currentRom.Data);
 
-            _currentHeader = header;
+            _currentHeader =
+                header;
 
             string fileName =
                 Path.GetFileName(
                     _currentRom.FileName);
 
-            // Restablecer la paleta inicial.
-            _currentPaletteOffset = null;
-            _tileViewer.ResetPalette();
+            _currentPaletteOffset =
+                null;
 
-            // Configurar selector de paleta.
+            _tileViewer.ResetPalette();
+            _tileSheetViewer.ResetPalette();
+
+            // Configurar paletas.
             int maximumPaletteOffset =
                 _currentRom.Data.Length -
                 SnesPalette.BytesPerPalette;
 
             if (maximumPaletteOffset >= 0)
             {
-                int maximumAlignedPaletteOffset =
+                int alignedPaletteOffset =
                     maximumPaletteOffset -
-                    (maximumPaletteOffset %
-                     SnesPalette.BytesPerColor);
+                    maximumPaletteOffset %
+                    SnesPalette.BytesPerColor;
 
                 _paletteOffsetInput.Maximum =
-                    maximumAlignedPaletteOffset;
+                    alignedPaletteOffset;
 
                 _paletteOffsetInput.Value = 0;
                 _paletteOffsetInput.Enabled = true;
+
                 _loadPaletteButton.Enabled = true;
                 _resetPaletteButton.Enabled = true;
             }
 
-            // Configurar selector de tiles.
-            int maximumOffset =
+            // Configurar tiles.
+            int maximumTileOffset =
                 _currentRom.Data.Length -
                 Decoder4Bpp.BytesPerTile;
 
-            if (maximumOffset >= 0)
+            if (maximumTileOffset >= 0)
             {
-                int maximumAlignedOffset =
-                    maximumOffset -
-                    (maximumOffset %
-                     Decoder4Bpp.BytesPerTile);
+                int alignedTileOffset =
+                    maximumTileOffset -
+                    maximumTileOffset %
+                    Decoder4Bpp.BytesPerTile;
 
                 _tileOffsetInput.Maximum =
-                    maximumAlignedOffset;
+                    alignedTileOffset;
 
                 _tileOffsetInput.Value = 0;
                 _tileOffsetInput.Enabled = true;
+
                 _showTileButton.Enabled = true;
 
+                // Configurar hoja.
+                _sheetOffsetInput.Maximum =
+                    alignedTileOffset;
+
+                _sheetOffsetInput.Value = 0;
+                _sheetOffsetInput.Enabled = true;
+
+                _showSheetButton.Enabled = true;
+
+                _tileSheetViewer.RomData =
+                    _currentRom.Data;
+
                 ShowTileAtOffset(0);
+                ShowSheetAtOffset(0);
             }
 
             Text =
-                $"Aladdin Sprite Studio - " +
-                $"{fileName}";
+                $"Aladdin Sprite Studio - {fileName}";
 
             MessageBox.Show(
                 $"ROM cargada correctamente.\n\n" +
                 $"Archivo: {_currentRom.FileName}\n" +
-                $"Tamaño del archivo: " +
-                $"{_currentRom.Size:N0} bytes\n\n" +
+                $"Tamaño: {_currentRom.Size:N0} bytes\n\n" +
                 $"Título interno: {header.Title}\n" +
                 $"Mapeo: {header.MappingName}\n" +
                 $"Offset del encabezado: " +
                 $"0x{header.HeaderOffset:X}\n" +
                 $"Cabecera de copiador: " +
                 $"{(header.HasCopierHeader ? "Sí" : "No")}\n" +
-                $"Tamaño ROM declarado: " +
-                $"{header.DeclaredRomSizeBytes:N0} bytes\n" +
-                $"Tamaño RAM declarado: " +
-                $"{header.DeclaredRamSizeBytes:N0} bytes\n" +
-                $"Código de región: " +
-                $"0x{header.CountryCode:X2}\n" +
-                $"Versión: {header.Version}\n" +
-                $"Checksum: " +
-                $"0x{header.Checksum:X4}\n" +
+                $"Checksum: 0x{header.Checksum:X4}\n" +
                 $"Complemento: " +
                 $"0x{header.ChecksumComplement:X4}\n" +
-                $"Checksum y complemento coherentes: " +
+                $"Checksum coherente: " +
                 $"{(header.HasValidChecksum ? "Sí" : "No")}",
                 "Información de la ROM",
                 MessageBoxButtons.OK,
@@ -497,24 +902,7 @@ public partial class MainForm : Form
         }
         catch (Exception ex)
         {
-            _currentRom = null;
-            _currentHeader = null;
-            _currentPaletteOffset = null;
-
-            _tileOffsetInput.Enabled = false;
-            _showTileButton.Enabled = false;
-            _previousTileButton.Enabled = false;
-            _nextTileButton.Enabled = false;
-
-            _paletteOffsetInput.Enabled = false;
-            _loadPaletteButton.Enabled = false;
-            _resetPaletteButton.Enabled = false;
-
-            _tileViewer.Pixels = null;
-            _tileViewer.ResetPalette();
-
-            statusLabelMain.Text =
-                "Sin ROM cargada";
+            ResetInterface();
 
             MessageBox.Show(
                 ex.Message,
@@ -522,5 +910,35 @@ public partial class MainForm : Form
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
         }
+    }
+
+    private void ResetInterface()
+    {
+        _currentRom = null;
+        _currentHeader = null;
+        _currentPaletteOffset = null;
+
+        _tileOffsetInput.Enabled = false;
+        _showTileButton.Enabled = false;
+        _previousTileButton.Enabled = false;
+        _nextTileButton.Enabled = false;
+
+        _paletteOffsetInput.Enabled = false;
+        _loadPaletteButton.Enabled = false;
+        _resetPaletteButton.Enabled = false;
+
+        _sheetOffsetInput.Enabled = false;
+        _showSheetButton.Enabled = false;
+        _previousSheetButton.Enabled = false;
+        _nextSheetButton.Enabled = false;
+
+        _tileViewer.Pixels = null;
+        _tileViewer.ResetPalette();
+
+        _tileSheetViewer.RomData = null;
+        _tileSheetViewer.ResetPalette();
+
+        statusLabelMain.Text =
+            "Sin ROM cargada";
     }
 }
