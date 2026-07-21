@@ -13,20 +13,22 @@ public partial class MainForm : Form
     private readonly TileViewer _tileViewer;
     private readonly NumericUpDown _tileOffsetInput;
     private readonly Button _showTileButton;
+    private readonly Button _previousTileButton;
+    private readonly Button _nextTileButton;
 
     public MainForm()
     {
         InitializeComponent();
 
-        #if DEBUG
+#if DEBUG
         if (!Decoder4Bpp.RunSelfTest())
         {
             throw new InvalidOperationException(
                 "La prueba del decodificador 4BPP falló.");
         }
-        #endif
+#endif
 
-                  _tileViewer = new TileViewer
+        _tileViewer = new TileViewer
         {
             Zoom = 32,
             ShowGrid = true,
@@ -53,7 +55,33 @@ public partial class MainForm : Form
             Enabled = false
         };
 
+        _previousTileButton = new Button
+        {
+            Text = "◀ Tile anterior",
+            AutoSize = true,
+            Enabled = false
+        };
+
+        _nextTileButton = new Button
+        {
+            Text = "Tile siguiente ▶",
+            AutoSize = true,
+            Enabled = false
+        };
+
         _showTileButton.Click += ShowTileButton_Click;
+        _previousTileButton.Click += PreviousTileButton_Click;
+        _nextTileButton.Click += NextTileButton_Click;
+
+        FlowLayoutPanel navigationButtonsPanel = new()
+        {
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false
+        };
+
+        navigationButtonsPanel.Controls.Add(_previousTileButton);
+        navigationButtonsPanel.Controls.Add(_nextTileButton);
 
         FlowLayoutPanel tileControlsPanel = new()
         {
@@ -73,6 +101,7 @@ public partial class MainForm : Form
 
         tileControlsPanel.Controls.Add(_tileOffsetInput);
         tileControlsPanel.Controls.Add(_showTileButton);
+        tileControlsPanel.Controls.Add(navigationButtonsPanel);
 
         mainSplitContainer.Panel1.Controls.Add(tileControlsPanel);
 
@@ -104,8 +133,8 @@ public partial class MainForm : Form
     }
 
     private void ShowTileButton_Click(
-    object? sender,
-    EventArgs e)
+        object? sender,
+        EventArgs e)
     {
         if (_currentRom is null)
         {
@@ -122,6 +151,68 @@ public partial class MainForm : Form
             _tileOffsetInput.Value);
 
         ShowTileAtOffset(offset);
+    }
+
+    private void PreviousTileButton_Click(
+        object? sender,
+        EventArgs e)
+    {
+        MoveTileOffset(
+            -Decoder4Bpp.BytesPerTile);
+    }
+
+    private void NextTileButton_Click(
+        object? sender,
+        EventArgs e)
+    {
+        MoveTileOffset(
+            Decoder4Bpp.BytesPerTile);
+    }
+
+    private void MoveTileOffset(int amount)
+    {
+        if (_currentRom is null)
+        {
+            return;
+        }
+
+        int currentOffset =
+            decimal.ToInt32(_tileOffsetInput.Value);
+
+        int maximumOffset =
+            decimal.ToInt32(_tileOffsetInput.Maximum);
+
+        int newOffset = Math.Clamp(
+            currentOffset + amount,
+            0,
+            maximumOffset);
+
+        _tileOffsetInput.Value = newOffset;
+
+        ShowTileAtOffset(newOffset);
+    }
+
+    private void UpdateTileNavigationButtons()
+    {
+        if (_currentRom is null)
+        {
+            _previousTileButton.Enabled = false;
+            _nextTileButton.Enabled = false;
+
+            return;
+        }
+
+        int currentOffset =
+            decimal.ToInt32(_tileOffsetInput.Value);
+
+        int maximumOffset =
+            decimal.ToInt32(_tileOffsetInput.Maximum);
+
+        _previousTileButton.Enabled =
+            currentOffset > 0;
+
+        _nextTileButton.Enabled =
+            currentOffset < maximumOffset;
     }
 
     private void ShowTileAtOffset(int offset)
@@ -143,17 +234,27 @@ public partial class MainForm : Form
         string mapping =
             _currentHeader?.MappingName ?? "Desconocido";
 
+        int tileNumber =
+            offset / Decoder4Bpp.BytesPerTile;
+
         statusLabelMain.Text =
             $"ROM: {fileName} | " +
             $"{mapping} | " +
-            $"Tile: 0x{offset:X}";
+            $"{_currentRom.Size:N0} bytes | " +
+            $"Tile #{tileNumber:N0} | " +
+            $"Offset: 0x{offset:X}";
+
+        UpdateTileNavigationButtons();
     }
 
-    private void AbrirRom_Click(object? sender, EventArgs e)
+    private void AbrirRom_Click(
+        object? sender,
+        EventArgs e)
     {
         using OpenFileDialog dialog = new();
 
-        dialog.Filter = "SNES ROM (*.sfc;*.smc)|*.sfc;*.smc";
+        dialog.Filter =
+            "SNES ROM (*.sfc;*.smc)|*.sfc;*.smc";
 
         if (dialog.ShowDialog() != DialogResult.OK)
         {
@@ -162,7 +263,8 @@ public partial class MainForm : Form
 
         try
         {
-            _currentRom = RomLoader.Load(dialog.FileName);
+            _currentRom = RomLoader.Load(
+                dialog.FileName);
 
             RomHeader header =
                 HeaderReader.Read(_currentRom.Data);
@@ -178,40 +280,45 @@ public partial class MainForm : Form
 
             if (maximumOffset >= 0)
             {
-                _tileOffsetInput.Maximum = maximumOffset;
+                int maximumAlignedOffset =
+                    maximumOffset -
+                    (maximumOffset %
+                     Decoder4Bpp.BytesPerTile);
+
+                _tileOffsetInput.Maximum =
+                    maximumAlignedOffset;
+
                 _tileOffsetInput.Value = 0;
                 _tileOffsetInput.Enabled = true;
-
                 _showTileButton.Enabled = true;
 
                 ShowTileAtOffset(0);
             }
 
-            Text = $"Aladdin Sprite Studio - {fileName}";
-
-            statusLabelMain.Text =
-                $"ROM: {fileName} | " +
-                $"{header.MappingName} | " +
-                $"{_currentRom.Size:N0} bytes | " +
-                "Tile: 0x0";
+            Text =
+                $"Aladdin Sprite Studio - {fileName}";
 
             MessageBox.Show(
                 $"ROM cargada correctamente.\n\n" +
                 $"Archivo: {_currentRom.FileName}\n" +
-                $"Tamaño del archivo: {_currentRom.Size:N0} bytes\n\n" +
+                $"Tamaño del archivo: " +
+                $"{_currentRom.Size:N0} bytes\n\n" +
                 $"Título interno: {header.Title}\n" +
                 $"Mapeo: {header.MappingName}\n" +
-                $"Offset del encabezado: 0x{header.HeaderOffset:X}\n" +
+                $"Offset del encabezado: " +
+                $"0x{header.HeaderOffset:X}\n" +
                 $"Cabecera de copiador: " +
                 $"{(header.HasCopierHeader ? "Sí" : "No")}\n" +
                 $"Tamaño ROM declarado: " +
                 $"{header.DeclaredRomSizeBytes:N0} bytes\n" +
                 $"Tamaño RAM declarado: " +
                 $"{header.DeclaredRamSizeBytes:N0} bytes\n" +
-                $"Código de región: 0x{header.CountryCode:X2}\n" +
+                $"Código de región: " +
+                $"0x{header.CountryCode:X2}\n" +
                 $"Versión: {header.Version}\n" +
                 $"Checksum: 0x{header.Checksum:X4}\n" +
-                $"Complemento: 0x{header.ChecksumComplement:X4}\n" +
+                $"Complemento: " +
+                $"0x{header.ChecksumComplement:X4}\n" +
                 $"Checksum y complemento coherentes: " +
                 $"{(header.HasValidChecksum ? "Sí" : "No")}",
                 "Información de la ROM",
@@ -220,8 +327,14 @@ public partial class MainForm : Form
         }
         catch (Exception ex)
         {
+            _currentRom = null;
+            _currentHeader = null;
+
             _tileOffsetInput.Enabled = false;
             _showTileButton.Enabled = false;
+            _previousTileButton.Enabled = false;
+            _nextTileButton.Enabled = false;
+
             _tileViewer.Pixels = null;
 
             MessageBox.Show(
