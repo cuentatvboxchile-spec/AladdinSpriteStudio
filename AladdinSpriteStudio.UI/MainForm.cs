@@ -11,6 +11,9 @@ public partial class MainForm : Form
 
     private readonly MenuStrip _menu;
     private readonly TileViewer _tileViewer;
+    private readonly NumericUpDown _tileOffsetInput;
+    private readonly Button _showTileButton;
+
     public MainForm()
     {
         InitializeComponent();
@@ -33,22 +36,45 @@ public partial class MainForm : Form
         mainSplitContainer.Panel2.AutoScroll = true;
         mainSplitContainer.Panel2.Controls.Add(_tileViewer);
 
-#if DEBUG
-        byte[,] previewPixels = new byte[8, 8];
-
-        for (int row = 0; row < 8; row++)
+        _tileOffsetInput = new NumericUpDown
         {
-            for (int column = 0; column < 8; column++)
+            Hexadecimal = true,
+            Minimum = 0,
+            Maximum = 0,
+            Increment = Decoder4Bpp.BytesPerTile,
+            Width = 150,
+            Enabled = false
+        };
+
+        _showTileButton = new Button
+        {
+            Text = "Mostrar tile",
+            AutoSize = true,
+            Enabled = false
+        };
+
+        _showTileButton.Click += ShowTileButton_Click;
+
+        FlowLayoutPanel tileControlsPanel = new()
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            Padding = new Padding(12)
+        };
+
+        tileControlsPanel.Controls.Add(
+            new Label
             {
-                previewPixels[row, column] =
-                    (byte)((row * 2 + column) % 16);
-            }
-        }
+                Text = "Offset ROM hexadecimal:",
+                AutoSize = true
+            });
 
-        _tileViewer.Pixels = previewPixels;
-#endif
+        tileControlsPanel.Controls.Add(_tileOffsetInput);
+        tileControlsPanel.Controls.Add(_showTileButton);
 
-
+        mainSplitContainer.Panel1.Controls.Add(tileControlsPanel);
 
         Text = "Aladdin Sprite Studio";
         Width = 1400;
@@ -77,6 +103,52 @@ public partial class MainForm : Form
         _menu.Items.Add(archivo);
     }
 
+    private void ShowTileButton_Click(
+    object? sender,
+    EventArgs e)
+    {
+        if (_currentRom is null)
+        {
+            MessageBox.Show(
+                "Primero debe abrir una ROM.",
+                "ROM no cargada",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+
+            return;
+        }
+
+        int offset = decimal.ToInt32(
+            _tileOffsetInput.Value);
+
+        ShowTileAtOffset(offset);
+    }
+
+    private void ShowTileAtOffset(int offset)
+    {
+        if (_currentRom is null)
+        {
+            return;
+        }
+
+        byte[,] pixels = Decoder4Bpp.DecodeTile(
+            _currentRom.Data,
+            offset);
+
+        _tileViewer.Pixels = pixels;
+
+        string fileName =
+            Path.GetFileName(_currentRom.FileName);
+
+        string mapping =
+            _currentHeader?.MappingName ?? "Desconocido";
+
+        statusLabelMain.Text =
+            $"ROM: {fileName} | " +
+            $"{mapping} | " +
+            $"Tile: 0x{offset:X}";
+    }
+
     private void AbrirRom_Click(object? sender, EventArgs e)
     {
         using OpenFileDialog dialog = new();
@@ -92,17 +164,36 @@ public partial class MainForm : Form
         {
             _currentRom = RomLoader.Load(dialog.FileName);
 
-            RomHeader header = HeaderReader.Read(_currentRom.Data);
+            RomHeader header =
+                HeaderReader.Read(_currentRom.Data);
+
             _currentHeader = header;
 
-            string fileName = Path.GetFileName(_currentRom.FileName);
+            string fileName =
+                Path.GetFileName(_currentRom.FileName);
+
+            int maximumOffset =
+                _currentRom.Data.Length -
+                Decoder4Bpp.BytesPerTile;
+
+            if (maximumOffset >= 0)
+            {
+                _tileOffsetInput.Maximum = maximumOffset;
+                _tileOffsetInput.Value = 0;
+                _tileOffsetInput.Enabled = true;
+
+                _showTileButton.Enabled = true;
+
+                ShowTileAtOffset(0);
+            }
 
             Text = $"Aladdin Sprite Studio - {fileName}";
 
             statusLabelMain.Text =
                 $"ROM: {fileName} | " +
                 $"{header.MappingName} | " +
-                $"{_currentRom.Size:N0} bytes";
+                $"{_currentRom.Size:N0} bytes | " +
+                "Tile: 0x0";
 
             MessageBox.Show(
                 $"ROM cargada correctamente.\n\n" +
@@ -129,6 +220,10 @@ public partial class MainForm : Form
         }
         catch (Exception ex)
         {
+            _tileOffsetInput.Enabled = false;
+            _showTileButton.Enabled = false;
+            _tileViewer.Pixels = null;
+
             MessageBox.Show(
                 ex.Message,
                 "Error al cargar la ROM",
