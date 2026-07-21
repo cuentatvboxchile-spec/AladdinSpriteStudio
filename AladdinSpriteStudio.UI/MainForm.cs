@@ -8,26 +8,36 @@ public partial class MainForm : Form
 {
     private Rom? _currentRom;
     private RomHeader? _currentHeader;
+
     private int? _currentPaletteOffset;
+
+    private LoadedPaletteFile? _loadedPaletteFile;
+    private string? _externalPaletteDescription;
 
     private readonly MenuStrip _menu;
 
-    // Visor individual.
+    // Tile individual.
     private readonly TileViewer _tileViewer;
     private readonly NumericUpDown _tileOffsetInput;
     private readonly Button _showTileButton;
     private readonly Button _previousTileButton;
     private readonly Button _nextTileButton;
 
-    // Paleta.
+    // Paleta desde la ROM.
     private readonly NumericUpDown _paletteOffsetInput;
     private readonly Button _loadPaletteButton;
     private readonly Button _resetPaletteButton;
 
-    // Hoja de 256 tiles.
+    // Paleta externa.
+    private readonly NumericUpDown _paletteBankInput;
+    private readonly Button _applyPaletteBankButton;
+    private readonly Label _paletteFileInfoLabel;
+
+    // Hoja de tiles.
     private readonly TileSheetViewer _tileSheetViewer;
     private readonly NumericUpDown _sheetOffsetInput;
     private readonly Button _showSheetButton;
+    private readonly Button _exportPageButton;
     private readonly Button _previousSheetButton;
     private readonly Button _nextSheetButton;
 
@@ -50,6 +60,7 @@ public partial class MainForm : Form
         DoubleBuffered = true;
 
         mainSplitContainer.SplitterDistance = 310;
+        mainSplitContainer.Panel2.AutoScroll = true;
 
         // =====================================================
         // VISOR INDIVIDUAL
@@ -84,7 +95,8 @@ public partial class MainForm : Form
             ShowTileGrid = true,
             Location = new Point(24, 350)
         };
-           _tileSheetViewer.TileSelected +=
+
+        _tileSheetViewer.TileSelected +=
             TileSheetViewer_TileSelected;
 
         Label sheetViewerLabel = new()
@@ -96,8 +108,6 @@ public partial class MainForm : Form
                 Font,
                 FontStyle.Bold)
         };
-
-        mainSplitContainer.Panel2.AutoScroll = true;
 
         mainSplitContainer.Panel2.Controls.Add(
             individualViewerLabel);
@@ -158,8 +168,7 @@ public partial class MainForm : Form
         FlowLayoutPanel tileNavigationPanel = new()
         {
             AutoSize = true,
-            FlowDirection =
-                FlowDirection.LeftToRight,
+            FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false
         };
 
@@ -170,7 +179,7 @@ public partial class MainForm : Form
             _nextTileButton);
 
         // =====================================================
-        // CONTROLES DE PALETA
+        // CONTROLES DE PALETA DESDE LA ROM
         // =====================================================
 
         _paletteOffsetInput = new NumericUpDown
@@ -185,7 +194,7 @@ public partial class MainForm : Form
 
         _loadPaletteButton = new Button
         {
-            Text = "Cargar paleta",
+            Text = "Cargar paleta desde ROM",
             AutoSize = true,
             Enabled = false
         };
@@ -206,8 +215,7 @@ public partial class MainForm : Form
         FlowLayoutPanel paletteButtonsPanel = new()
         {
             AutoSize = true,
-            FlowDirection =
-                FlowDirection.TopDown,
+            FlowDirection = FlowDirection.TopDown,
             WrapContents = false
         };
 
@@ -218,6 +226,35 @@ public partial class MainForm : Form
             _resetPaletteButton);
 
         // =====================================================
+        // CONTROLES DE PALETA EXTERNA
+        // =====================================================
+
+        _paletteFileInfoLabel = new Label
+        {
+            Text = "Ninguna paleta externa cargada",
+            AutoSize = true,
+            MaximumSize = new Size(260, 0)
+        };
+
+        _paletteBankInput = new NumericUpDown
+        {
+            Minimum = 0,
+            Maximum = 0,
+            Width = 160,
+            Enabled = false
+        };
+
+        _applyPaletteBankButton = new Button
+        {
+            Text = "Aplicar banco importado",
+            AutoSize = true,
+            Enabled = false
+        };
+
+        _applyPaletteBankButton.Click +=
+            ApplyPaletteBankButton_Click;
+
+        // =====================================================
         // CONTROLES DE LA HOJA DE TILES
         // =====================================================
 
@@ -226,7 +263,7 @@ public partial class MainForm : Form
             Hexadecimal = true,
             Minimum = 0,
             Maximum = 0,
-            Increment = 0x2000,
+            Increment = TilePageExporter.BytesPerPage,
             Width = 160,
             Enabled = false
         };
@@ -234,6 +271,13 @@ public partial class MainForm : Form
         _showSheetButton = new Button
         {
             Text = "Mostrar hoja",
+            AutoSize = true,
+            Enabled = false
+        };
+
+        _exportPageButton = new Button
+        {
+            Text = "Exportar página actual",
             AutoSize = true,
             Enabled = false
         };
@@ -255,6 +299,9 @@ public partial class MainForm : Form
         _showSheetButton.Click +=
             ShowSheetButton_Click;
 
+        _exportPageButton.Click +=
+            ExportPageButton_Click;
+
         _previousSheetButton.Click +=
             PreviousSheetButton_Click;
 
@@ -264,8 +311,7 @@ public partial class MainForm : Form
         FlowLayoutPanel sheetNavigationPanel = new()
         {
             AutoSize = true,
-            FlowDirection =
-                FlowDirection.TopDown,
+            FlowDirection = FlowDirection.TopDown,
             WrapContents = false
         };
 
@@ -283,8 +329,7 @@ public partial class MainForm : Form
         {
             Dock = DockStyle.Top,
             AutoSize = true,
-            FlowDirection =
-                FlowDirection.TopDown,
+            FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
             Padding = new Padding(12)
         };
@@ -308,7 +353,7 @@ public partial class MainForm : Form
 
         controlsPanel.Controls.Add(
             CreateSectionLabel(
-                "Paleta de colores"));
+                "Paleta desde la ROM"));
 
         controlsPanel.Controls.Add(
             CreateNormalLabel(
@@ -319,6 +364,23 @@ public partial class MainForm : Form
 
         controlsPanel.Controls.Add(
             paletteButtonsPanel);
+
+        controlsPanel.Controls.Add(
+            CreateSectionLabel(
+                "Paleta externa"));
+
+        controlsPanel.Controls.Add(
+            _paletteFileInfoLabel);
+
+        controlsPanel.Controls.Add(
+            CreateNormalLabel(
+                "Banco de 16 colores:"));
+
+        controlsPanel.Controls.Add(
+            _paletteBankInput);
+
+        controlsPanel.Controls.Add(
+            _applyPaletteBankButton);
 
         controlsPanel.Controls.Add(
             CreateSectionLabel(
@@ -333,6 +395,9 @@ public partial class MainForm : Form
 
         controlsPanel.Controls.Add(
             _showSheetButton);
+
+        controlsPanel.Controls.Add(
+            _exportPageButton);
 
         controlsPanel.Controls.Add(
             sheetNavigationPanel);
@@ -388,10 +453,53 @@ public partial class MainForm : Form
         ToolStripMenuItem abrirRom =
             new("Abrir ROM");
 
-        abrirRom.Click += AbrirRom_Click;
+        ToolStripMenuItem importarPaleta =
+            new("Importar paleta .pal");
+
+        ToolStripMenuItem exportarPagina =
+            new("Exportar página actual...");
+
+        ToolStripMenuItem exportarPaginas =
+            new("Exportar todas las páginas de Aladdin...");
+
+        ToolStripMenuItem exportarBloque =
+            new("Exportar bloque completo de Aladdin...");
+
+        abrirRom.Click +=
+            AbrirRom_Click;
+
+        importarPaleta.Click +=
+            ImportPalette_Click;
+
+        exportarPagina.Click +=
+            ExportPageButton_Click;
+
+        exportarPaginas.Click +=
+            ExportAllAladdinPages_Click;
+
+        exportarBloque.Click +=
+            ExportAladdinTiles_Click;
 
         archivo.DropDownItems.Add(
             abrirRom);
+
+        archivo.DropDownItems.Add(
+            new ToolStripSeparator());
+
+        archivo.DropDownItems.Add(
+            importarPaleta);
+
+        archivo.DropDownItems.Add(
+            new ToolStripSeparator());
+
+        archivo.DropDownItems.Add(
+            exportarPagina);
+
+        archivo.DropDownItems.Add(
+            exportarPaginas);
+
+        archivo.DropDownItems.Add(
+            exportarBloque);
 
         _menu.Items.Add(
             archivo);
@@ -420,7 +528,8 @@ public partial class MainForm : Form
             decimal.ToInt32(
                 _tileOffsetInput.Value);
 
-        ShowTileAtOffset(offset);
+        ShowTileAtOffset(
+            offset);
     }
 
     private void PreviousTileButton_Click(
@@ -494,8 +603,11 @@ public partial class MainForm : Form
     {
         if (_currentRom is null)
         {
-            _previousTileButton.Enabled = false;
-            _nextTileButton.Enabled = false;
+            _previousTileButton.Enabled =
+                false;
+
+            _nextTileButton.Enabled =
+                false;
 
             return;
         }
@@ -516,8 +628,8 @@ public partial class MainForm : Form
     }
 
     private void TileSheetViewer_TileSelected(
-    object? sender,
-    TileSelectedEventArgs e)
+        object? sender,
+        TileSelectedEventArgs e)
     {
         if (_currentRom is null)
         {
@@ -542,7 +654,143 @@ public partial class MainForm : Form
     }
 
     // =========================================================
-    // PALETA
+    // IMPORTAR PALETA EXTERNA
+    // =========================================================
+
+    private void ImportPalette_Click(
+        object? sender,
+        EventArgs e)
+    {
+        using OpenFileDialog dialog =
+            new();
+
+        dialog.Title =
+            "Importar archivo de paleta";
+
+        dialog.Filter =
+            "Archivos de paleta (*.pal)|*.pal|" +
+            "Todos los archivos (*.*)|*.*";
+
+        if (dialog.ShowDialog() !=
+            DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            _loadedPaletteFile =
+                PaletteFileLoader.Load(
+                    dialog.FileName);
+
+            _paletteBankInput.Minimum =
+                0;
+
+            _paletteBankInput.Maximum =
+                Math.Max(
+                    0,
+                    _loadedPaletteFile.BankCount - 1);
+
+            _paletteBankInput.Value =
+                0;
+
+            _paletteBankInput.Enabled =
+                true;
+
+            _applyPaletteBankButton.Enabled =
+                true;
+
+            _paletteFileInfoLabel.Text =
+                $"{Path.GetFileName(dialog.FileName)}\n" +
+                $"{_loadedPaletteFile.FormatName}\n" +
+                $"{_loadedPaletteFile.ColorCount} colores\n" +
+                $"{_loadedPaletteFile.BankCount} bancos";
+
+            ApplyLoadedPaletteBank(
+                0);
+
+            MessageBox.Show(
+                $"Paleta cargada correctamente.\n\n" +
+                $"Archivo: " +
+                $"{Path.GetFileName(dialog.FileName)}\n" +
+                $"Formato: " +
+                $"{_loadedPaletteFile.FormatName}\n" +
+                $"Colores: " +
+                $"{_loadedPaletteFile.ColorCount}\n" +
+                $"Bancos de 16 colores: " +
+                $"{_loadedPaletteFile.BankCount}",
+                "Paleta importada",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                ex.Message,
+                "Error al importar la paleta",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
+
+    private void ApplyPaletteBankButton_Click(
+        object? sender,
+        EventArgs e)
+    {
+        if (_loadedPaletteFile is null)
+        {
+            return;
+        }
+
+        int bankIndex =
+            decimal.ToInt32(
+                _paletteBankInput.Value);
+
+        ApplyLoadedPaletteBank(
+            bankIndex);
+    }
+
+    private void ApplyLoadedPaletteBank(
+        int bankIndex)
+    {
+        if (_loadedPaletteFile is null)
+        {
+            return;
+        }
+
+        Color[] palette =
+            _loadedPaletteFile.GetBank(
+                bankIndex);
+
+        _tileViewer.Palette =
+            palette;
+
+        _tileSheetViewer.Palette =
+            palette;
+
+        _currentPaletteOffset =
+            null;
+
+        _externalPaletteDescription =
+            $"Paleta externa: " +
+            $"{Path.GetFileName(_loadedPaletteFile.FilePath)} " +
+            $"| Banco {bankIndex}";
+
+        if (_currentRom is not null)
+        {
+            int tileOffset =
+                decimal.ToInt32(
+                    _tileOffsetInput.Value);
+
+            UpdateTileStatus(
+                tileOffset);
+        }
+
+        _tileSheetViewer.Invalidate();
+    }
+
+    // =========================================================
+    // PALETA DESDE LA ROM
     // =========================================================
 
     private void LoadPaletteButton_Click(
@@ -574,12 +822,17 @@ public partial class MainForm : Form
             _currentPaletteOffset =
                 paletteOffset;
 
+            _externalPaletteDescription =
+                null;
+
             int tileOffset =
                 decimal.ToInt32(
                     _tileOffsetInput.Value);
 
             UpdateTileStatus(
                 tileOffset);
+
+            _tileSheetViewer.Invalidate();
         }
         catch (Exception ex)
         {
@@ -598,7 +851,11 @@ public partial class MainForm : Form
         _tileViewer.ResetPalette();
         _tileSheetViewer.ResetPalette();
 
-        _currentPaletteOffset = null;
+        _currentPaletteOffset =
+            null;
+
+        _externalPaletteDescription =
+            null;
 
         if (_currentRom is not null)
         {
@@ -689,6 +946,23 @@ public partial class MainForm : Form
             return;
         }
 
+        offset -=
+            offset %
+            Decoder4Bpp.BytesPerTile;
+
+        int maximumOffset =
+            decimal.ToInt32(
+                _sheetOffsetInput.Maximum);
+
+        offset =
+            Math.Clamp(
+                offset,
+                0,
+                maximumOffset);
+
+        _sheetOffsetInput.Value =
+            offset;
+
         _tileSheetViewer.StartOffset =
             offset;
 
@@ -700,25 +974,22 @@ public partial class MainForm : Form
             offset /
             Decoder4Bpp.BytesPerTile;
 
-        string paletteInformation =
-            _currentPaletteOffset
-                is int paletteOffset
-                ? $"Paleta: 0x{paletteOffset:X}"
-                : "Paleta: escala de grises";
-
         statusLabelMain.Text =
             $"Hoja de tiles | " +
             $"Primer tile: #{firstTileNumber:N0} | " +
             $"Offset inicial: 0x{offset:X} | " +
-            paletteInformation;
+            GetPaletteStatusText();
     }
 
     private void UpdateSheetNavigationButtons()
     {
         if (_currentRom is null)
         {
-            _previousSheetButton.Enabled = false;
-            _nextSheetButton.Enabled = false;
+            _previousSheetButton.Enabled =
+                false;
+
+            _nextSheetButton.Enabled =
+                false;
 
             return;
         }
@@ -739,8 +1010,464 @@ public partial class MainForm : Form
     }
 
     // =========================================================
-    // ESTADO
+    // EXPORTAR PÁGINA ACTUAL
     // =========================================================
+
+    private void ExportPageButton_Click(
+        object? sender,
+        EventArgs e)
+    {
+        if (_currentRom is null)
+        {
+            MessageBox.Show(
+                "Primero debe abrir una ROM.",
+                "ROM no cargada",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+
+            return;
+        }
+
+        int startOffset =
+            _tileSheetViewer.StartOffset;
+
+        int tileCount =
+            TilePageExporter.GetTileCountForPage(
+                _currentRom.Data,
+                startOffset);
+
+        if (tileCount <= 0)
+        {
+            MessageBox.Show(
+                "No hay tiles válidos para exportar " +
+                "desde la página mostrada.",
+                "Exportación no válida",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+
+            return;
+        }
+
+        int finalOffset =
+            startOffset +
+            tileCount *
+            Decoder4Bpp.BytesPerTile -
+            1;
+
+        string romName =
+            Path.GetFileNameWithoutExtension(
+                _currentRom.FileName);
+
+        string defaultFileName =
+            $"{romName}_Page_" +
+            $"{startOffset:X5}_" +
+            $"{finalOffset:X5}.png";
+
+        using SaveFileDialog dialog = new()
+        {
+            Title = "Exportar página de tiles",
+            Filter = "Imagen PNG (*.png)|*.png",
+            DefaultExt = "png",
+            AddExtension = true,
+            FileName = defaultFileName,
+            OverwritePrompt = true
+        };
+
+        if (dialog.ShowDialog() !=
+            DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            string pngPath =
+                Path.ChangeExtension(
+                    dialog.FileName,
+                    ".png");
+
+            string binPath =
+                Path.ChangeExtension(
+                    pngPath,
+                    ".bin");
+
+            Color[] palette =
+                _tileSheetViewer.Palette;
+
+            int exportedTiles =
+                TilePageExporter.ExportPage(
+                    _currentRom.Data,
+                    startOffset,
+                    palette,
+                    pngPath,
+                    binPath);
+
+            MessageBox.Show(
+                $"Página exportada correctamente.\n\n" +
+                $"Tiles exportados: {exportedTiles:N0}\n" +
+                $"Inicio: 0x{startOffset:X}\n" +
+                $"Final: 0x{finalOffset:X}\n\n" +
+                $"Imagen PNG:\n{pngPath}\n\n" +
+                $"Datos 4BPP:\n{binPath}",
+                "Página exportada",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+
+            statusLabelMain.Text =
+                $"Página exportada | " +
+                $"0x{startOffset:X}–0x{finalOffset:X} | " +
+                $"{exportedTiles:N0} tiles";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                ex.Message,
+                "Error al exportar la página",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
+
+    // =========================================================
+    // EXPORTAR TODAS LAS PÁGINAS
+    // =========================================================
+
+    private void ExportAllAladdinPages_Click(
+        object? sender,
+        EventArgs e)
+    {
+        if (_currentRom is null)
+        {
+            MessageBox.Show(
+                "Primero debe abrir la ROM de Aladdin.",
+                "ROM no cargada",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+
+            return;
+        }
+
+        const int blockStartOffset =
+            0x40000;
+
+        const int blockEndOffsetExclusive =
+            0x4F000;
+
+        if (_currentRom.Data.Length <
+            blockEndOffsetExclusive)
+        {
+            MessageBox.Show(
+                "La ROM no contiene el bloque esperado " +
+                "entre 0x40000 y 0x4F000.",
+                "ROM incompatible",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+
+            return;
+        }
+
+        using FolderBrowserDialog dialog =
+            new();
+
+        dialog.Description =
+            "Seleccione la carpeta donde se guardarán " +
+            "todas las páginas de Aladdin.";
+
+        if (dialog.ShowDialog() !=
+            DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            string romName =
+                Path.GetFileNameWithoutExtension(
+                    _currentRom.FileName);
+
+            string outputDirectory =
+                Path.Combine(
+                    dialog.SelectedPath,
+                    "Aladdin_Pages_40000_4EFFF");
+
+            Directory.CreateDirectory(
+                outputDirectory);
+
+            Color[] palette =
+                _tileSheetViewer.Palette;
+
+            List<string> manifestLines =
+                new()
+                {
+                    "ALADDIN SPRITE STUDIO",
+                    "Exportación de páginas de tiles",
+                    "",
+                    $"ROM: {_currentRom.FileName}",
+                    $"Rango: 0x{blockStartOffset:X}–" +
+                    $"0x{blockEndOffsetExclusive - 1:X}",
+                    $"Paleta: {GetPaletteStatusText()}",
+                    ""
+                };
+
+            int exportedPageCount =
+                0;
+
+            int exportedTileCount =
+                0;
+
+            for (int pageStartOffset =
+                     blockStartOffset;
+
+                 pageStartOffset <
+                     blockEndOffsetExclusive;
+
+                 pageStartOffset +=
+                     TilePageExporter.BytesPerPage)
+            {
+                int pageEndOffsetExclusive =
+                    Math.Min(
+                        pageStartOffset +
+                        TilePageExporter.BytesPerPage,
+                        blockEndOffsetExclusive);
+
+                int tileCount =
+                    TilePageExporter.GetTileCountForPage(
+                        _currentRom.Data,
+                        pageStartOffset,
+                        pageEndOffsetExclusive);
+
+                if (tileCount <= 0)
+                {
+                    continue;
+                }
+
+                int pageFinalOffset =
+                    pageStartOffset +
+                    tileCount *
+                    Decoder4Bpp.BytesPerTile -
+                    1;
+
+                string baseFileName =
+                    $"{romName}_Page_" +
+                    $"{pageStartOffset:X5}_" +
+                    $"{pageFinalOffset:X5}";
+
+                string pngPath =
+                    Path.Combine(
+                        outputDirectory,
+                        baseFileName + ".png");
+
+                string binPath =
+                    Path.Combine(
+                        outputDirectory,
+                        baseFileName + ".bin");
+
+                int exportedTiles =
+                    TilePageExporter.ExportPage(
+                        _currentRom.Data,
+                        pageStartOffset,
+                        palette,
+                        pngPath,
+                        binPath,
+                        pageEndOffsetExclusive);
+
+                exportedPageCount++;
+
+                exportedTileCount +=
+                    exportedTiles;
+
+                manifestLines.Add(
+                    $"Página {exportedPageCount}: " +
+                    $"0x{pageStartOffset:X5}–" +
+                    $"0x{pageFinalOffset:X5} | " +
+                    $"{exportedTiles} tiles | " +
+                    $"{baseFileName}");
+            }
+
+            string manifestPath =
+                Path.Combine(
+                    outputDirectory,
+                    "Aladdin_Pages_Manifest.txt");
+
+            manifestLines.Add("");
+            manifestLines.Add(
+                $"Páginas exportadas: " +
+                $"{exportedPageCount}");
+
+            manifestLines.Add(
+                $"Tiles exportados: " +
+                $"{exportedTileCount}");
+
+            File.WriteAllLines(
+                manifestPath,
+                manifestLines);
+
+            int generatedFileCount =
+                exportedPageCount * 2 + 1;
+
+            MessageBox.Show(
+                $"Exportación completada correctamente.\n\n" +
+                $"Páginas exportadas: {exportedPageCount}\n" +
+                $"Tiles exportados: {exportedTileCount:N0}\n" +
+                $"Archivos generados: {generatedFileCount}\n\n" +
+                $"Carpeta:\n{outputDirectory}\n\n" +
+                $"Manifiesto:\n{manifestPath}",
+                "Páginas exportadas",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+
+            statusLabelMain.Text =
+                $"Exportadas {exportedPageCount} páginas | " +
+                $"{exportedTileCount:N0} tiles | " +
+                $"0x{blockStartOffset:X}–" +
+                $"0x{blockEndOffsetExclusive - 1:X}";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                ex.Message,
+                "Error al exportar las páginas",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
+
+    // =========================================================
+    // EXPORTAR BLOQUE COMPLETO
+    // =========================================================
+
+    private void ExportAladdinTiles_Click(
+        object? sender,
+        EventArgs e)
+    {
+        if (_currentRom is null)
+        {
+            MessageBox.Show(
+                "Primero debe abrir la ROM de Aladdin.",
+                "ROM no cargada",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+
+            return;
+        }
+
+        const int startOffset =
+            0x40000;
+
+        const int endOffsetExclusive =
+            0x4F000;
+
+        if (_currentRom.Data.Length <
+            endOffsetExclusive)
+        {
+            MessageBox.Show(
+                "La ROM cargada no contiene el bloque " +
+                "esperado entre 0x40000 y 0x4F000.",
+                "ROM incompatible",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+
+            return;
+        }
+
+        using SaveFileDialog dialog =
+            new();
+
+        dialog.Title =
+            "Exportar bloque completo de Aladdin";
+
+        dialog.Filter =
+            "Imagen PNG (*.png)|*.png";
+
+        dialog.DefaultExt =
+            "png";
+
+        dialog.AddExtension =
+            true;
+
+        dialog.FileName =
+            "Aladdin_Tiles_40000_4EFFF.png";
+
+        if (dialog.ShowDialog() !=
+            DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            string pngPath =
+                Path.ChangeExtension(
+                    dialog.FileName,
+                    ".png");
+
+            Color[] currentPalette =
+                _tileSheetViewer.Palette;
+
+            int tileCount =
+                TileBlockExporter.ExportPngAndRaw(
+                    _currentRom.Data,
+                    startOffset,
+                    endOffsetExclusive,
+                    currentPalette,
+                    pngPath,
+                    columns: 16,
+                    scale: 4,
+                    transparentColorZero: true);
+
+            string binaryFilePath =
+                Path.ChangeExtension(
+                    pngPath,
+                    ".bin");
+
+            MessageBox.Show(
+                $"Exportación completada correctamente.\n\n" +
+                $"Tiles exportados: {tileCount:N0}\n" +
+                $"Inicio: 0x{startOffset:X}\n" +
+                $"Final: 0x{endOffsetExclusive - 1:X}\n\n" +
+                $"Imagen:\n{pngPath}\n\n" +
+                $"Datos 4BPP:\n{binaryFilePath}",
+                "Tiles exportados",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+
+            statusLabelMain.Text =
+                $"Exportados {tileCount:N0} tiles " +
+                $"desde 0x{startOffset:X} " +
+                $"hasta 0x{endOffsetExclusive - 1:X}";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                ex.Message,
+                "Error al exportar los tiles",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
+
+    // =========================================================
+    // BARRA DE ESTADO
+    // =========================================================
+
+    private string GetPaletteStatusText()
+    {
+        if (!string.IsNullOrWhiteSpace(
+                _externalPaletteDescription))
+        {
+            return _externalPaletteDescription;
+        }
+
+        if (_currentPaletteOffset
+            is int paletteOffset)
+        {
+            return
+                $"Paleta ROM: 0x{paletteOffset:X}";
+        }
+
+        return
+            "Paleta: escala de grises";
+    }
 
     private void UpdateTileStatus(
         int tileOffset)
@@ -762,19 +1489,13 @@ public partial class MainForm : Form
             tileOffset /
             Decoder4Bpp.BytesPerTile;
 
-        string paletteInformation =
-            _currentPaletteOffset
-                is int paletteOffset
-                ? $"Paleta: 0x{paletteOffset:X}"
-                : "Paleta: escala de grises";
-
         statusLabelMain.Text =
             $"ROM: {fileName} | " +
             $"{mapping} | " +
             $"{_currentRom.Size:N0} bytes | " +
             $"Tile #{tileNumber:N0} | " +
             $"Offset: 0x{tileOffset:X} | " +
-            paletteInformation;
+            GetPaletteStatusText();
     }
 
     // =========================================================
@@ -814,13 +1535,8 @@ public partial class MainForm : Form
                 Path.GetFileName(
                     _currentRom.FileName);
 
-            _currentPaletteOffset =
-                null;
+            ResetPaletteSelection();
 
-            _tileViewer.ResetPalette();
-            _tileSheetViewer.ResetPalette();
-
-            // Configurar paletas.
             int maximumPaletteOffset =
                 _currentRom.Data.Length -
                 SnesPalette.BytesPerPalette;
@@ -835,14 +1551,19 @@ public partial class MainForm : Form
                 _paletteOffsetInput.Maximum =
                     alignedPaletteOffset;
 
-                _paletteOffsetInput.Value = 0;
-                _paletteOffsetInput.Enabled = true;
+                _paletteOffsetInput.Value =
+                    0;
 
-                _loadPaletteButton.Enabled = true;
-                _resetPaletteButton.Enabled = true;
+                _paletteOffsetInput.Enabled =
+                    true;
+
+                _loadPaletteButton.Enabled =
+                    true;
+
+                _resetPaletteButton.Enabled =
+                    true;
             }
 
-            // Configurar tiles.
             int maximumTileOffset =
                 _currentRom.Data.Length -
                 Decoder4Bpp.BytesPerTile;
@@ -857,29 +1578,43 @@ public partial class MainForm : Form
                 _tileOffsetInput.Maximum =
                     alignedTileOffset;
 
-                _tileOffsetInput.Value = 0;
-                _tileOffsetInput.Enabled = true;
+                _tileOffsetInput.Value =
+                    0;
 
-                _showTileButton.Enabled = true;
+                _tileOffsetInput.Enabled =
+                    true;
 
-                // Configurar hoja.
+                _showTileButton.Enabled =
+                    true;
+
                 _sheetOffsetInput.Maximum =
                     alignedTileOffset;
 
-                _sheetOffsetInput.Value = 0;
-                _sheetOffsetInput.Enabled = true;
+                _sheetOffsetInput.Value =
+                    0;
 
-                _showSheetButton.Enabled = true;
+                _sheetOffsetInput.Enabled =
+                    true;
+
+                _showSheetButton.Enabled =
+                    true;
+
+                _exportPageButton.Enabled =
+                    true;
 
                 _tileSheetViewer.RomData =
                     _currentRom.Data;
 
-                ShowTileAtOffset(0);
-                ShowSheetAtOffset(0);
+                ShowTileAtOffset(
+                    0);
+
+                ShowSheetAtOffset(
+                    0);
             }
 
             Text =
-                $"Aladdin Sprite Studio - {fileName}";
+                $"Aladdin Sprite Studio - " +
+                $"{fileName}";
 
             MessageBox.Show(
                 $"ROM cargada correctamente.\n\n" +
@@ -891,7 +1626,8 @@ public partial class MainForm : Form
                 $"0x{header.HeaderOffset:X}\n" +
                 $"Cabecera de copiador: " +
                 $"{(header.HasCopierHeader ? "Sí" : "No")}\n" +
-                $"Checksum: 0x{header.Checksum:X4}\n" +
+                $"Checksum: " +
+                $"0x{header.Checksum:X4}\n" +
                 $"Complemento: " +
                 $"0x{header.ChecksumComplement:X4}\n" +
                 $"Checksum coherente: " +
@@ -912,33 +1648,95 @@ public partial class MainForm : Form
         }
     }
 
+    private void ResetPaletteSelection()
+    {
+        _currentPaletteOffset =
+            null;
+
+        _externalPaletteDescription =
+            null;
+
+        _loadedPaletteFile =
+            null;
+
+        _paletteFileInfoLabel.Text =
+            "Ninguna paleta externa cargada";
+
+        _paletteBankInput.Minimum =
+            0;
+
+        _paletteBankInput.Maximum =
+            0;
+
+        _paletteBankInput.Value =
+            0;
+
+        _paletteBankInput.Enabled =
+            false;
+
+        _applyPaletteBankButton.Enabled =
+            false;
+
+        _tileViewer.ResetPalette();
+        _tileSheetViewer.ResetPalette();
+    }
+
     private void ResetInterface()
     {
-        _currentRom = null;
-        _currentHeader = null;
-        _currentPaletteOffset = null;
+        _currentRom =
+            null;
 
-        _tileOffsetInput.Enabled = false;
-        _showTileButton.Enabled = false;
-        _previousTileButton.Enabled = false;
-        _nextTileButton.Enabled = false;
+        _currentHeader =
+            null;
 
-        _paletteOffsetInput.Enabled = false;
-        _loadPaletteButton.Enabled = false;
-        _resetPaletteButton.Enabled = false;
+        ResetPaletteSelection();
 
-        _sheetOffsetInput.Enabled = false;
-        _showSheetButton.Enabled = false;
-        _previousSheetButton.Enabled = false;
-        _nextSheetButton.Enabled = false;
+        _tileOffsetInput.Enabled =
+            false;
 
-        _tileViewer.Pixels = null;
-        _tileViewer.ResetPalette();
+        _showTileButton.Enabled =
+            false;
 
-        _tileSheetViewer.RomData = null;
-        _tileSheetViewer.ResetPalette();
+        _previousTileButton.Enabled =
+            false;
+
+        _nextTileButton.Enabled =
+            false;
+
+        _paletteOffsetInput.Enabled =
+            false;
+
+        _loadPaletteButton.Enabled =
+            false;
+
+        _resetPaletteButton.Enabled =
+            false;
+
+        _sheetOffsetInput.Enabled =
+            false;
+
+        _showSheetButton.Enabled =
+            false;
+
+        _exportPageButton.Enabled =
+            false;
+
+        _previousSheetButton.Enabled =
+            false;
+
+        _nextSheetButton.Enabled =
+            false;
+
+        _tileViewer.Pixels =
+            null;
+
+        _tileSheetViewer.RomData =
+            null;
 
         statusLabelMain.Text =
             "Sin ROM cargada";
+
+        Text =
+            "Aladdin Sprite Studio";
     }
 }
