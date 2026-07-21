@@ -10,7 +10,6 @@ public partial class MainForm : Form
     private RomHeader? _currentHeader;
 
     private int? _currentPaletteOffset;
-
     private LoadedPaletteFile? _loadedPaletteFile;
     private string? _externalPaletteDescription;
 
@@ -78,9 +77,7 @@ public partial class MainForm : Form
             Text = "Tile individual",
             AutoSize = true,
             Location = new Point(24, 16),
-            Font = new Font(
-                Font,
-                FontStyle.Bold)
+            Font = new Font(Font, FontStyle.Bold)
         };
 
         // =====================================================
@@ -104,9 +101,7 @@ public partial class MainForm : Form
             Text = "Hoja de tiles (16 × 16)",
             AutoSize = true,
             Location = new Point(24, 325),
-            Font = new Font(
-                Font,
-                FontStyle.Bold)
+            Font = new Font(Font, FontStyle.Bold)
         };
 
         mainSplitContainer.Panel2.Controls.Add(
@@ -179,7 +174,7 @@ public partial class MainForm : Form
             _nextTileButton);
 
         // =====================================================
-        // CONTROLES DE PALETA DESDE LA ROM
+        // PALETA DESDE LA ROM
         // =====================================================
 
         _paletteOffsetInput = new NumericUpDown
@@ -226,7 +221,7 @@ public partial class MainForm : Form
             _resetPaletteButton);
 
         // =====================================================
-        // CONTROLES DE PALETA EXTERNA
+        // PALETA EXTERNA
         // =====================================================
 
         _paletteFileInfoLabel = new Label
@@ -255,7 +250,7 @@ public partial class MainForm : Form
             ApplyPaletteBankButton_Click;
 
         // =====================================================
-        // CONTROLES DE LA HOJA DE TILES
+        // HOJA DE TILES
         // =====================================================
 
         _sheetOffsetInput = new NumericUpDown
@@ -335,8 +330,7 @@ public partial class MainForm : Form
         };
 
         controlsPanel.Controls.Add(
-            CreateSectionLabel(
-                "Tile individual"));
+            CreateSectionLabel("Tile individual"));
 
         controlsPanel.Controls.Add(
             CreateNormalLabel(
@@ -456,6 +450,9 @@ public partial class MainForm : Form
         ToolStripMenuItem importarPaleta =
             new("Importar paleta .pal");
 
+        ToolStripMenuItem importarPagina =
+            new("Importar página PNG en copia de la ROM...");
+
         ToolStripMenuItem exportarPagina =
             new("Exportar página actual...");
 
@@ -470,6 +467,9 @@ public partial class MainForm : Form
 
         importarPaleta.Click +=
             ImportPalette_Click;
+
+        importarPagina.Click +=
+            ImportTilePageToRomCopy_Click;
 
         exportarPagina.Click +=
             ExportPageButton_Click;
@@ -488,6 +488,9 @@ public partial class MainForm : Form
 
         archivo.DropDownItems.Add(
             importarPaleta);
+
+        archivo.DropDownItems.Add(
+            importarPagina);
 
         archivo.DropDownItems.Add(
             new ToolStripSeparator());
@@ -661,15 +664,13 @@ public partial class MainForm : Form
         object? sender,
         EventArgs e)
     {
-        using OpenFileDialog dialog =
-            new();
-
-        dialog.Title =
-            "Importar archivo de paleta";
-
-        dialog.Filter =
-            "Archivos de paleta (*.pal)|*.pal|" +
-            "Todos los archivos (*.*)|*.*";
+        using OpenFileDialog dialog = new()
+        {
+            Title = "Importar archivo de paleta",
+            Filter =
+                "Archivos de paleta (*.pal)|*.pal|" +
+                "Todos los archivos (*.*)|*.*"
+        };
 
         if (dialog.ShowDialog() !=
             DialogResult.OK)
@@ -1010,6 +1011,158 @@ public partial class MainForm : Form
     }
 
     // =========================================================
+    // IMPORTAR PÁGINA PNG EN COPIA DE LA ROM
+    // =========================================================
+
+    private void ImportTilePageToRomCopy_Click(
+        object? sender,
+        EventArgs e)
+    {
+        if (_currentRom is null)
+        {
+            MessageBox.Show(
+                "Primero debe abrir la ROM de Aladdin.",
+                "ROM no cargada",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+
+            return;
+        }
+
+        int startOffset =
+            _tileSheetViewer.StartOffset;
+
+        using OpenFileDialog pngDialog = new()
+        {
+            Title =
+                $"Seleccionar página PNG para 0x{startOffset:X}",
+
+            Filter =
+                "Imagen PNG (*.png)|*.png",
+
+            CheckFileExists = true,
+            Multiselect = false
+        };
+
+        if (pngDialog.ShowDialog() !=
+            DialogResult.OK)
+        {
+            return;
+        }
+
+        string romName =
+            Path.GetFileNameWithoutExtension(
+                _currentRom.FileName);
+
+        string originalExtension =
+            Path.GetExtension(
+                _currentRom.FileName);
+
+        if (string.IsNullOrWhiteSpace(
+                originalExtension))
+        {
+            originalExtension =
+                ".sfc";
+        }
+
+        string suggestedName =
+            $"{romName}_Modificado_" +
+            $"{startOffset:X5}" +
+            originalExtension;
+
+        using SaveFileDialog romDialog = new()
+        {
+            Title =
+                "Guardar copia modificada de la ROM",
+
+            Filter =
+                "ROM de SNES (*.sfc)|*.sfc|" +
+                "ROM de SNES con cabecera (*.smc)|*.smc",
+
+            FileName =
+                suggestedName,
+
+            DefaultExt =
+                originalExtension.TrimStart('.'),
+
+            AddExtension = true,
+            OverwritePrompt = true
+        };
+
+        if (romDialog.ShowDialog() !=
+            DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            string originalPath =
+                Path.GetFullPath(
+                    _currentRom.FileName);
+
+            string outputPath =
+                Path.GetFullPath(
+                    romDialog.FileName);
+
+            if (string.Equals(
+                    originalPath,
+                    outputPath,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                MessageBox.Show(
+                    "No puede sobrescribir la ROM original.\n\n" +
+                    "Seleccione otro nombre para la copia modificada.",
+                    "Protección de la ROM original",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+
+                return;
+            }
+
+            Color[] palette =
+                _tileSheetViewer.Palette;
+
+            TilePageImportResult result =
+                TilePageImporter.ImportPageToRomCopy(
+                    _currentRom.Data,
+                    startOffset,
+                    pngDialog.FileName,
+                    palette,
+                    outputPath);
+
+            MessageBox.Show(
+                $"Página insertada correctamente.\n\n" +
+                $"PNG utilizado:\n" +
+                $"{pngDialog.FileName}\n\n" +
+                $"Tiles insertados: " +
+                $"{result.TileCount:N0}\n" +
+                $"Inicio: 0x{result.StartOffset:X}\n" +
+                $"Final: 0x{result.FinalOffset:X}\n\n" +
+                $"ROM modificada:\n" +
+                $"{result.OutputRomPath}\n\n" +
+                "La ROM original no fue modificada.",
+                "ROM modificada creada",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+
+            statusLabelMain.Text =
+                $"Página importada | " +
+                $"0x{result.StartOffset:X}–" +
+                $"0x{result.FinalOffset:X} | " +
+                $"{result.TileCount:N0} tiles";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                ex.Message,
+                "Error al importar la página",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
+
+    // =========================================================
     // EXPORTAR PÁGINA ACTUAL
     // =========================================================
 
@@ -1166,12 +1319,12 @@ public partial class MainForm : Form
             return;
         }
 
-        using FolderBrowserDialog dialog =
-            new();
-
-        dialog.Description =
-            "Seleccione la carpeta donde se guardarán " +
-            "todas las páginas de Aladdin.";
+        using FolderBrowserDialog dialog = new()
+        {
+            Description =
+                "Seleccione la carpeta donde se guardarán " +
+                "todas las páginas de Aladdin."
+        };
 
         if (dialog.ShowDialog() !=
             DialogResult.OK)
@@ -1197,23 +1350,19 @@ public partial class MainForm : Form
                 _tileSheetViewer.Palette;
 
             List<string> manifestLines =
-                new()
-                {
-                    "ALADDIN SPRITE STUDIO",
-                    "Exportación de páginas de tiles",
-                    "",
-                    $"ROM: {_currentRom.FileName}",
-                    $"Rango: 0x{blockStartOffset:X}–" +
-                    $"0x{blockEndOffsetExclusive - 1:X}",
-                    $"Paleta: {GetPaletteStatusText()}",
-                    ""
-                };
+            [
+                "ALADDIN SPRITE STUDIO",
+                "Exportación de páginas de tiles",
+                "",
+                $"ROM: {_currentRom.FileName}",
+                $"Rango: 0x{blockStartOffset:X}–" +
+                $"0x{blockEndOffsetExclusive - 1:X}",
+                $"Paleta: {GetPaletteStatusText()}",
+                ""
+            ];
 
-            int exportedPageCount =
-                0;
-
-            int exportedTileCount =
-                0;
+            int exportedPageCount = 0;
+            int exportedTileCount = 0;
 
             for (int pageStartOffset =
                      blockStartOffset;
@@ -1272,7 +1421,6 @@ public partial class MainForm : Form
                         pageEndOffsetExclusive);
 
                 exportedPageCount++;
-
                 exportedTileCount +=
                     exportedTiles;
 
@@ -1370,23 +1518,23 @@ public partial class MainForm : Form
             return;
         }
 
-        using SaveFileDialog dialog =
-            new();
+        using SaveFileDialog dialog = new()
+        {
+            Title =
+                "Exportar bloque completo de Aladdin",
 
-        dialog.Title =
-            "Exportar bloque completo de Aladdin";
+            Filter =
+                "Imagen PNG (*.png)|*.png",
 
-        dialog.Filter =
-            "Imagen PNG (*.png)|*.png";
+            DefaultExt =
+                "png",
 
-        dialog.DefaultExt =
-            "png";
+            AddExtension =
+                true,
 
-        dialog.AddExtension =
-            true;
-
-        dialog.FileName =
-            "Aladdin_Tiles_40000_4EFFF.png";
+            FileName =
+                "Aladdin_Tiles_40000_4EFFF.png"
+        };
 
         if (dialog.ShowDialog() !=
             DialogResult.OK)
@@ -1447,7 +1595,7 @@ public partial class MainForm : Form
     }
 
     // =========================================================
-    // BARRA DE ESTADO
+    // ESTADO
     // =========================================================
 
     private string GetPaletteStatusText()
@@ -1506,11 +1654,11 @@ public partial class MainForm : Form
         object? sender,
         EventArgs e)
     {
-        using OpenFileDialog dialog =
-            new();
-
-        dialog.Filter =
-            "SNES ROM (*.sfc;*.smc)|*.sfc;*.smc";
+        using OpenFileDialog dialog = new()
+        {
+            Filter =
+                "SNES ROM (*.sfc;*.smc)|*.sfc;*.smc"
+        };
 
         if (dialog.ShowDialog() !=
             DialogResult.OK)
