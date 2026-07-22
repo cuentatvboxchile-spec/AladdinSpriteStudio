@@ -5,8 +5,8 @@ using AladdinSpriteStudio.UI.CharacterReplacement.Models;
 namespace AladdinSpriteStudio.UI.CharacterReplacement.UI;
 
 /// <summary>
-/// Permite comparar la hoja original de Aladdin
-/// con una o varias hojas del personaje sustituto.
+/// Permite preparar la hoja original de Aladdin y una o varias
+/// hojas del personaje sustituto antes de asignar animaciones.
 /// </summary>
 public sealed class CharacterReplacementForm :
     System.Windows.Forms.Form
@@ -17,17 +17,12 @@ public sealed class CharacterReplacementForm :
         Replacement
     }
 
-    /// <summary>
-    /// Elemento mostrado dentro del selector
-    /// de hojas del personaje nuevo.
-    /// </summary>
     private sealed class ReplacementSheetItem
     {
         public ReplacementSheetItem(
             SpriteSheetDocument document)
         {
-            Document =
-                document ??
+            Document = document ??
                 throw new ArgumentNullException(
                     nameof(document));
         }
@@ -40,8 +35,7 @@ public sealed class CharacterReplacementForm :
         }
     }
 
-    private SpriteSheetDocument?
-        _aladdinDocument;
+    private SpriteSheetDocument? _aladdinDocument;
 
     private readonly List<SpriteSheetDocument>
         _replacementDocuments =
@@ -77,9 +71,7 @@ public sealed class CharacterReplacementForm :
         Height = 900;
 
         MinimumSize =
-            new Size(
-                1050,
-                650);
+            new Size(1100, 680);
 
         StartPosition =
             FormStartPosition.CenterParent;
@@ -87,17 +79,31 @@ public sealed class CharacterReplacementForm :
         BackColor =
             SystemColors.Control;
 
+        KeyPreview = true;
+
         _aladdinPreview =
-            new SpriteSheetPreview
-            {
-                Dock = DockStyle.Fill
-            };
+            new SpriteSheetPreview();
 
         _replacementPreview =
-            new SpriteSheetPreview
-            {
-                Dock = DockStyle.Fill
-            };
+            new SpriteSheetPreview();
+
+        _aladdinPreview.FrameSelected +=
+            Preview_FrameSelected;
+
+        _replacementPreview.FrameSelected +=
+            Preview_FrameSelected;
+
+        _aladdinPreview.SelectionChanged +=
+            Preview_SelectionChanged;
+
+        _replacementPreview.SelectionChanged +=
+            Preview_SelectionChanged;
+
+        _aladdinPreview.RegionCreated +=
+            Preview_RegionCreated;
+
+        _replacementPreview.RegionCreated +=
+            Preview_RegionCreated;
 
         _aladdinInfoLabel =
             CreateInformationLabel();
@@ -111,8 +117,12 @@ public sealed class CharacterReplacementForm :
                 DropDownStyle =
                     ComboBoxStyle.DropDownList,
 
-                Width = 390
+                Width = 420
             };
+
+        _replacementSheetCombo
+            .SelectedIndexChanged +=
+            ReplacementSheetCombo_SelectedIndexChanged;
 
         _removeReplacementSheetButton =
             new Button
@@ -121,16 +131,6 @@ public sealed class CharacterReplacementForm :
                 AutoSize = true,
                 Enabled = false
             };
-
-        _aladdinPreview.FrameSelected +=
-            Preview_FrameSelected;
-
-        _replacementPreview.FrameSelected +=
-            Preview_FrameSelected;
-
-        _replacementSheetCombo
-            .SelectedIndexChanged +=
-            ReplacementSheetCombo_SelectedIndexChanged;
 
         _removeReplacementSheetButton.Click +=
             RemoveReplacementSheet_Click;
@@ -199,7 +199,7 @@ public sealed class CharacterReplacementForm :
     }
 
     // =========================================================
-    // CREACIÓN DE LA INTERFAZ
+    // CREACIÓN DE LOS PANELES
     // =========================================================
 
     private Control CreateAladdinPanel()
@@ -242,20 +242,28 @@ public sealed class CharacterReplacementForm :
             CreateToolbar();
 
         Button loadButton =
-            CreateButton(
-                "Cargar hoja");
+            CreateButton("Cargar hoja");
 
         Button detectButton =
-            CreateButton(
-                "Detectar poses");
+            CreateButton("Detectar poses");
 
         Button backgroundButton =
-            CreateButton(
-                "Elegir fondo");
+            CreateButton("Elegir fondo");
 
-        Button removeFrameButton =
-            CreateButton(
-                "Eliminar selección");
+        Button createRegionButton =
+            CreateButton("Crear región");
+
+        Button mergeButton =
+            CreateButton("Unir seleccionadas");
+
+        Button removeButton =
+            CreateButton("Eliminar selección");
+
+        Button undoButton =
+            CreateButton("Deshacer");
+
+        Button sortButton =
+            CreateButton("Ordenar por filas");
 
         loadButton.Click +=
             (_, _) =>
@@ -272,22 +280,39 @@ public sealed class CharacterReplacementForm :
                 ChooseBackground(
                     SheetSide.Aladdin);
 
-        removeFrameButton.Click +=
+        createRegionButton.Click +=
             (_, _) =>
-                RemoveSelectedFrame(
+                BeginCreateRegion(
                     SheetSide.Aladdin);
 
-        toolbar.Controls.Add(
-            loadButton);
+        mergeButton.Click +=
+            (_, _) =>
+                MergeSelectedFrames(
+                    SheetSide.Aladdin);
 
-        toolbar.Controls.Add(
-            detectButton);
+        removeButton.Click +=
+            (_, _) =>
+                RemoveSelectedFrames(
+                    SheetSide.Aladdin);
 
-        toolbar.Controls.Add(
-            backgroundButton);
+        undoButton.Click +=
+            (_, _) =>
+                UndoLastChange(
+                    SheetSide.Aladdin);
 
-        toolbar.Controls.Add(
-            removeFrameButton);
+        sortButton.Click +=
+            (_, _) =>
+                SortFramesByRows(
+                    SheetSide.Aladdin);
+
+        toolbar.Controls.Add(loadButton);
+        toolbar.Controls.Add(detectButton);
+        toolbar.Controls.Add(backgroundButton);
+        toolbar.Controls.Add(createRegionButton);
+        toolbar.Controls.Add(mergeButton);
+        toolbar.Controls.Add(removeButton);
+        toolbar.Controls.Add(undoButton);
+        toolbar.Controls.Add(sortButton);
 
         layout.Controls.Add(
             toolbar,
@@ -300,7 +325,8 @@ public sealed class CharacterReplacementForm :
             1);
 
         layout.Controls.Add(
-            _aladdinPreview,
+            CreateScrollablePreviewPanel(
+                _aladdinPreview),
             0,
             2);
 
@@ -353,23 +379,31 @@ public sealed class CharacterReplacementForm :
         FlowLayoutPanel toolbar =
             CreateToolbar();
 
-        Button addSheetButton =
-            CreateButton(
-                "Agregar hojas");
+        Button addSheetsButton =
+            CreateButton("Agregar hojas");
 
         Button detectButton =
-            CreateButton(
-                "Detectar poses");
+            CreateButton("Detectar poses");
 
         Button backgroundButton =
-            CreateButton(
-                "Elegir fondo");
+            CreateButton("Elegir fondo");
 
-        Button removeFrameButton =
-            CreateButton(
-                "Eliminar selección");
+        Button createRegionButton =
+            CreateButton("Crear región");
 
-        addSheetButton.Click +=
+        Button mergeButton =
+            CreateButton("Unir seleccionadas");
+
+        Button removeButton =
+            CreateButton("Eliminar selección");
+
+        Button undoButton =
+            CreateButton("Deshacer");
+
+        Button sortButton =
+            CreateButton("Ordenar por filas");
+
+        addSheetsButton.Click +=
             (_, _) =>
                 LoadSheets(
                     SheetSide.Replacement);
@@ -384,37 +418,53 @@ public sealed class CharacterReplacementForm :
                 ChooseBackground(
                     SheetSide.Replacement);
 
-        removeFrameButton.Click +=
+        createRegionButton.Click +=
             (_, _) =>
-                RemoveSelectedFrame(
+                BeginCreateRegion(
                     SheetSide.Replacement);
 
-        toolbar.Controls.Add(
-            addSheetButton);
+        mergeButton.Click +=
+            (_, _) =>
+                MergeSelectedFrames(
+                    SheetSide.Replacement);
 
-        toolbar.Controls.Add(
-            detectButton);
+        removeButton.Click +=
+            (_, _) =>
+                RemoveSelectedFrames(
+                    SheetSide.Replacement);
 
-        toolbar.Controls.Add(
-            backgroundButton);
+        undoButton.Click +=
+            (_, _) =>
+                UndoLastChange(
+                    SheetSide.Replacement);
 
-        toolbar.Controls.Add(
-            removeFrameButton);
+        sortButton.Click +=
+            (_, _) =>
+                SortFramesByRows(
+                    SheetSide.Replacement);
+
+        toolbar.Controls.Add(addSheetsButton);
+        toolbar.Controls.Add(detectButton);
+        toolbar.Controls.Add(backgroundButton);
+        toolbar.Controls.Add(createRegionButton);
+        toolbar.Controls.Add(mergeButton);
+        toolbar.Controls.Add(removeButton);
+        toolbar.Controls.Add(undoButton);
+        toolbar.Controls.Add(sortButton);
 
         FlowLayoutPanel selectorPanel =
             new()
             {
                 Dock = DockStyle.Fill,
                 AutoSize = true,
+
                 FlowDirection =
                     FlowDirection.LeftToRight,
+
                 WrapContents = true,
+
                 Padding =
-                    new Padding(
-                        0,
-                        3,
-                        0,
-                        5)
+                    new Padding(0, 3, 0, 5)
             };
 
         selectorPanel.Controls.Add(
@@ -422,6 +472,7 @@ public sealed class CharacterReplacementForm :
             {
                 Text = "Hoja activa:",
                 AutoSize = true,
+
                 Margin =
                     new Padding(
                         3,
@@ -452,7 +503,8 @@ public sealed class CharacterReplacementForm :
             2);
 
         layout.Controls.Add(
-            _replacementPreview,
+            CreateScrollablePreviewPanel(
+                _replacementPreview),
             0,
             3);
 
@@ -462,28 +514,58 @@ public sealed class CharacterReplacementForm :
         return groupBox;
     }
 
+    private static Panel CreateScrollablePreviewPanel(
+        SpriteSheetPreview preview)
+    {
+        Panel scrollPanel =
+            new()
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+
+                BackColor =
+                    Color.FromArgb(
+                        32,
+                        32,
+                        35),
+
+                Margin =
+                    Padding.Empty,
+
+                Padding =
+                    Padding.Empty
+            };
+
+        preview.Dock =
+            DockStyle.None;
+
+        preview.Location =
+            Point.Empty;
+
+        scrollPanel.Controls.Add(
+            preview);
+
+        return scrollPanel;
+    }
+
     private static FlowLayoutPanel CreateToolbar()
     {
         return new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
             AutoSize = true,
-            WrapContents = true,
 
             FlowDirection =
                 FlowDirection.LeftToRight,
 
+            WrapContents = true,
+
             Padding =
-                new Padding(
-                    0,
-                    0,
-                    0,
-                    4)
+                new Padding(0, 0, 0, 4)
         };
     }
 
-    private static Button CreateButton(
-        string text)
+    private static Button CreateButton(string text)
     {
         return new Button
         {
@@ -512,9 +594,7 @@ public sealed class CharacterReplacementForm :
                     8),
 
             MaximumSize =
-                new Size(
-                    650,
-                    0)
+                new Size(650, 0)
         };
     }
 
@@ -522,15 +602,13 @@ public sealed class CharacterReplacementForm :
     // CARGAR HOJAS
     // =========================================================
 
-    private void LoadSheets(
-        SheetSide side)
+    private void LoadSheets(SheetSide side)
     {
         using OpenFileDialog dialog =
             new()
             {
                 Title =
-                    side ==
-                    SheetSide.Aladdin
+                    side == SheetSide.Aladdin
                         ? "Cargar hoja original de Aladdin"
                         : "Agregar hojas del personaje nuevo",
 
@@ -542,8 +620,7 @@ public sealed class CharacterReplacementForm :
                 CheckFileExists = true,
 
                 Multiselect =
-                    side ==
-                    SheetSide.Replacement
+                    side == SheetSide.Replacement
             };
 
         if (dialog.ShowDialog(this) !=
@@ -556,8 +633,7 @@ public sealed class CharacterReplacementForm :
         {
             UseWaitCursor = true;
 
-            if (side ==
-                SheetSide.Aladdin)
+            if (side == SheetSide.Aladdin)
             {
                 LoadAladdinSheet(
                     dialog.FileName);
@@ -583,8 +659,7 @@ public sealed class CharacterReplacementForm :
         }
     }
 
-    private void LoadAladdinSheet(
-        string filePath)
+    private void LoadAladdinSheet(string filePath)
     {
         SpriteSheetDocument document =
             SpriteSheetDocument.Load(
@@ -592,16 +667,13 @@ public sealed class CharacterReplacementForm :
 
         try
         {
-            AnalyzeDocument(
-                document);
+            AnalyzeDocument(document);
 
-            _aladdinPreview.Document =
-                null;
+            _aladdinPreview.Document = null;
 
             _aladdinDocument?.Dispose();
 
-            _aladdinDocument =
-                document;
+            _aladdinDocument = document;
 
             _aladdinPreview.Document =
                 document;
@@ -625,8 +697,7 @@ public sealed class CharacterReplacementForm :
     {
         int addedCount = 0;
 
-        foreach (string filePath
-                 in filePaths)
+        foreach (string filePath in filePaths)
         {
             int existingIndex =
                 FindReplacementDocument(
@@ -647,8 +718,7 @@ public sealed class CharacterReplacementForm :
 
             try
             {
-                AnalyzeDocument(
-                    document);
+                AnalyzeDocument(document);
 
                 _replacementDocuments.Add(
                     document);
@@ -657,8 +727,7 @@ public sealed class CharacterReplacementForm :
                     new(document);
 
                 _replacementSheetCombo
-                    .Items.Add(
-                        item);
+                    .Items.Add(item);
 
                 _replacementSheetCombo
                     .SelectedItem =
@@ -721,7 +790,7 @@ public sealed class CharacterReplacementForm :
     }
 
     // =========================================================
-    // CAMBIAR HOJA ACTIVA
+    // HOJA EXTERNA ACTIVA
     // =========================================================
 
     private void ReplacementSheetCombo_SelectedIndexChanged(
@@ -730,6 +799,9 @@ public sealed class CharacterReplacementForm :
     {
         SpriteSheetDocument? document =
             GetActiveReplacementDocument();
+
+        _replacementPreview.CreateRegionMode =
+            false;
 
         _replacementPreview.Document =
             document;
@@ -743,8 +815,7 @@ public sealed class CharacterReplacementForm :
         if (document is not null)
         {
             _statusLabel.Text =
-                $"Hoja activa: " +
-                $"{document.FileName}";
+                $"Hoja activa: {document.FileName}";
         }
     }
 
@@ -776,18 +847,15 @@ public sealed class CharacterReplacementForm :
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question);
 
-        if (confirmation !=
-            DialogResult.Yes)
+        if (confirmation != DialogResult.Yes)
         {
             return;
         }
 
         int selectedIndex =
-            _replacementSheetCombo
-                .SelectedIndex;
+            _replacementSheetCombo.SelectedIndex;
 
-        _replacementPreview.Document =
-            null;
+        _replacementPreview.Document = null;
 
         _replacementSheetCombo.Items.Remove(
             item);
@@ -821,29 +889,17 @@ public sealed class CharacterReplacementForm :
     // DETECTAR POSES
     // =========================================================
 
-    private void DetectFrames(
-        SheetSide side)
+    private void DetectFrames(SheetSide side)
     {
         SpriteSheetDocument? document =
-            GetDocument(
-                side);
+            GetDocument(side);
 
         SpriteSheetPreview preview =
-            GetPreview(
-                side);
+            GetPreview(side);
 
         if (document is null)
         {
-            MessageBox.Show(
-                this,
-                side == SheetSide.Aladdin
-                    ? "Primero debe cargar la hoja de Aladdin."
-                    : "Primero debe agregar y seleccionar " +
-                      "una hoja del personaje nuevo.",
-                "Hoja no cargada",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
-
+            ShowMissingSheetMessage(side);
             return;
         }
 
@@ -851,16 +907,13 @@ public sealed class CharacterReplacementForm :
         {
             UseWaitCursor = true;
 
-            AnalyzeDocument(
-                document);
+            AnalyzeDocument(document);
 
-            preview.SelectedFrame =
-                null;
-
+            preview.SelectedFrame = null;
+            preview.CreateRegionMode = false;
             preview.Invalidate();
 
-            UpdateInformation(
-                side);
+            UpdateInformation(side);
 
             _statusLabel.Text =
                 $"Detección terminada en " +
@@ -890,15 +943,10 @@ public sealed class CharacterReplacementForm :
             {
                 BackgroundTolerance = 18,
                 AlphaThreshold = 16,
-
                 MinimumPixelCount = 12,
                 MinimumWidth = 2,
                 MinimumHeight = 2,
-
-                // Evita unir automáticamente
-                // personajes cercanos.
                 MergeDistance = 0,
-
                 Padding = 1
             };
 
@@ -908,30 +956,317 @@ public sealed class CharacterReplacementForm :
                 document.BackgroundColor,
                 options);
 
-        document.ReplaceFrames(
-            frames);
+        document.ReplaceFrames(frames);
     }
 
     // =========================================================
-    // FONDO Y ELIMINACIÓN DE REGIONES
+    // CREAR, UNIR Y ELIMINAR REGIONES
     // =========================================================
 
-    private void ChooseBackground(
-        SheetSide side)
+    private void BeginCreateRegion(SheetSide side)
     {
         SpriteSheetDocument? document =
-            GetDocument(
-                side);
+            GetDocument(side);
 
         if (document is null)
         {
+            ShowMissingSheetMessage(side);
+            return;
+        }
+
+        SpriteSheetPreview preview =
+            GetPreview(side);
+
+        SpriteSheetPreview otherPreview =
+            side == SheetSide.Aladdin
+                ? _replacementPreview
+                : _aladdinPreview;
+
+        otherPreview.CreateRegionMode = false;
+
+        preview.ClearSelection();
+        preview.CreateRegionMode = true;
+        preview.Focus();
+
+        _statusLabel.Text =
+            "Arrastre el mouse alrededor de la pose. " +
+            "Presione Escape para cancelar.";
+    }
+
+    private void Preview_RegionCreated(
+        object? sender,
+        SpriteRegionCreatedEventArgs e)
+    {
+        SheetSide side =
+            ReferenceEquals(
+                sender,
+                _aladdinPreview)
+                ? SheetSide.Aladdin
+                : SheetSide.Replacement;
+
+        SpriteSheetDocument? document =
+            GetDocument(side);
+
+        SpriteSheetPreview preview =
+            GetPreview(side);
+
+        if (document is null)
+        {
+            return;
+        }
+
+        try
+        {
+            SpriteFrame newFrame =
+                document.AddFrame(e.Bounds);
+
+            preview.SelectedFrame =
+                newFrame;
+
+            preview.Invalidate();
+
+            UpdateInformation(side);
+
+            _statusLabel.Text =
+                $"Región creada: " +
+                $"X={newFrame.Bounds.X}, " +
+                $"Y={newFrame.Bounds.Y}, " +
+                $"{newFrame.Bounds.Width} × " +
+                $"{newFrame.Bounds.Height} píxeles.";
+        }
+        catch (Exception ex)
+        {
             MessageBox.Show(
                 this,
-                "Primero debe cargar una hoja.",
-                "Hoja no cargada",
+                ex.Message,
+                "No se pudo crear la región",
                 MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
+                MessageBoxIcon.Error);
+        }
+    }
 
+    private void MergeSelectedFrames(SheetSide side)
+    {
+        SpriteSheetDocument? document =
+            GetDocument(side);
+
+        SpriteSheetPreview preview =
+            GetPreview(side);
+
+        if (document is null)
+        {
+            ShowMissingSheetMessage(side);
+            return;
+        }
+
+        SpriteFrame[] selectedFrames =
+            preview.SelectedFrames.ToArray();
+
+        if (selectedFrames.Length < 2)
+        {
+            MessageBox.Show(
+                this,
+                "Seleccione al menos dos regiones.\n\n" +
+                "Mantenga presionada Ctrl mientras " +
+                "hace clic sobre cada región.",
+                "Selección insuficiente",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+
+            return;
+        }
+
+        SpriteFrame? mergedFrame =
+            document.MergeFrames(
+                selectedFrames);
+
+        if (mergedFrame is null)
+        {
+            return;
+        }
+
+        preview.SelectedFrame =
+            mergedFrame;
+
+        preview.Invalidate();
+
+        UpdateInformation(side);
+
+        _statusLabel.Text =
+            $"Se combinaron " +
+            $"{selectedFrames.Length} regiones.";
+    }
+
+    private void RemoveSelectedFrames(SheetSide side)
+    {
+        SpriteSheetDocument? document =
+            GetDocument(side);
+
+        SpriteSheetPreview preview =
+            GetPreview(side);
+
+        if (document is null)
+        {
+            ShowMissingSheetMessage(side);
+            return;
+        }
+
+        SpriteFrame[] selectedFrames =
+            preview.SelectedFrames.ToArray();
+
+        if (selectedFrames.Length == 0)
+        {
+            MessageBox.Show(
+                this,
+                "Seleccione una o varias regiones.\n\n" +
+                "Use Ctrl + clic para seleccionar varias.",
+                "Sin selección",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+
+            return;
+        }
+
+        DialogResult confirmation =
+            MessageBox.Show(
+                this,
+                selectedFrames.Length == 1
+                    ? "¿Eliminar la región seleccionada?"
+                    : $"¿Eliminar las " +
+                      $"{selectedFrames.Length} " +
+                      "regiones seleccionadas?",
+                "Eliminar regiones",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+
+        if (confirmation != DialogResult.Yes)
+        {
+            return;
+        }
+
+        int previousCount =
+            document.Frames.Count;
+
+        bool removed =
+            document.RemoveFrames(
+                selectedFrames);
+
+        int currentCount =
+            document.Frames.Count;
+
+        if (!removed ||
+            currentCount >= previousCount)
+        {
+            MessageBox.Show(
+                this,
+                "No fue posible eliminar las regiones seleccionadas.",
+                "Error al eliminar",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+
+            return;
+        }
+
+        preview.ClearSelection();
+        preview.Invalidate();
+
+        UpdateInformation(side);
+
+        int removedCount =
+            previousCount - currentCount;
+
+        _statusLabel.Text =
+            $"Regiones eliminadas: {removedCount}. " +
+            $"Antes: {previousCount}. " +
+            $"Ahora: {currentCount}.";
+    }
+
+    // =========================================================
+    // DESHACER Y ORDENAR
+    // =========================================================
+
+    private void UndoLastChange(SheetSide side)
+    {
+        SpriteSheetDocument? document =
+            GetDocument(side);
+
+        SpriteSheetPreview preview =
+            GetPreview(side);
+
+        if (document is null)
+        {
+            ShowMissingSheetMessage(side);
+            return;
+        }
+
+        preview.ClearSelection();
+
+        bool restored =
+            document.UndoLastChange();
+
+        if (!restored)
+        {
+            MessageBox.Show(
+                this,
+                "No hay modificaciones para deshacer.",
+                "Historial vacío",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+
+            return;
+        }
+
+        preview.Invalidate();
+
+        UpdateInformation(side);
+
+        _statusLabel.Text =
+            "Se restauró el estado anterior.";
+    }
+
+    private void SortFramesByRows(SheetSide side)
+    {
+        SpriteSheetDocument? document =
+            GetDocument(side);
+
+        SpriteSheetPreview preview =
+            GetPreview(side);
+
+        if (document is null)
+        {
+            ShowMissingSheetMessage(side);
+            return;
+        }
+
+        if (document.Frames.Count < 2)
+        {
+            return;
+        }
+
+        document.SortFramesByRows(
+            rowTolerance: 10);
+
+        preview.ClearSelection();
+        preview.Invalidate();
+
+        UpdateInformation(side);
+
+        _statusLabel.Text =
+            "Las regiones fueron ordenadas por filas.";
+    }
+
+    // =========================================================
+    // COLOR DE FONDO Y SELECCIÓN
+    // =========================================================
+
+    private void ChooseBackground(SheetSide side)
+    {
+        SpriteSheetDocument? document =
+            GetDocument(side);
+
+        if (document is null)
+        {
+            ShowMissingSheetMessage(side);
             return;
         }
 
@@ -941,8 +1276,7 @@ public sealed class CharacterReplacementForm :
                 Color =
                     document.BackgroundColor,
 
-                FullOpen =
-                    true
+                FullOpen = true
             };
 
         if (dialog.ShowDialog(this) !=
@@ -954,63 +1288,17 @@ public sealed class CharacterReplacementForm :
         document.BackgroundColor =
             dialog.Color;
 
-        DetectFrames(
-            side);
+        DetectFrames(side);
     }
-
-    private void RemoveSelectedFrame(
-        SheetSide side)
-    {
-        SpriteSheetDocument? document =
-            GetDocument(
-                side);
-
-        SpriteSheetPreview preview =
-            GetPreview(
-                side);
-
-        if (document is null ||
-            preview.SelectedFrame is null)
-        {
-            MessageBox.Show(
-                this,
-                "Seleccione primero una región detectada.",
-                "Sin selección",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
-
-            return;
-        }
-
-        SpriteFrame selectedFrame =
-            preview.SelectedFrame;
-
-        document.RemoveFrame(
-            selectedFrame);
-
-        preview.SelectedFrame =
-            null;
-
-        preview.Invalidate();
-
-        UpdateInformation(
-            side);
-
-        _statusLabel.Text =
-            "La región seleccionada fue eliminada.";
-    }
-
-    // =========================================================
-    // SELECCIÓN
-    // =========================================================
 
     private void Preview_FrameSelected(
         object? sender,
         SpriteFrameSelectedEventArgs e)
     {
         string sourceName =
-            sender ==
-            _aladdinPreview
+            ReferenceEquals(
+                sender,
+                _aladdinPreview)
                 ? _aladdinDocument?.FileName
                     ?? "Aladdin"
                 : GetActiveReplacementDocument()
@@ -1027,15 +1315,28 @@ public sealed class CharacterReplacementForm :
             $"{e.Frame.PixelCount:N0} píxeles visibles";
     }
 
+    private void Preview_SelectionChanged(
+        object? sender,
+        SpriteFrameSelectionChangedEventArgs e)
+    {
+        if (e.SelectedFrames.Count <= 1)
+        {
+            return;
+        }
+
+        _statusLabel.Text =
+            $"{e.SelectedFrames.Count} regiones seleccionadas. " +
+            "Puede unirlas o eliminarlas.";
+    }
+
     // =========================================================
-    // DOCUMENTOS ACTIVOS
+    // DOCUMENTOS E INFORMACIÓN
     // =========================================================
 
     private SpriteSheetDocument? GetDocument(
         SheetSide side)
     {
-        return side ==
-               SheetSide.Aladdin
+        return side == SheetSide.Aladdin
             ? _aladdinDocument
             : GetActiveReplacementDocument();
     }
@@ -1053,26 +1354,33 @@ public sealed class CharacterReplacementForm :
     private SpriteSheetPreview GetPreview(
         SheetSide side)
     {
-        return side ==
-               SheetSide.Aladdin
+        return side == SheetSide.Aladdin
             ? _aladdinPreview
             : _replacementPreview;
     }
 
-    // =========================================================
-    // INFORMACIÓN
-    // =========================================================
+    private void ShowMissingSheetMessage(
+        SheetSide side)
+    {
+        MessageBox.Show(
+            this,
+            side == SheetSide.Aladdin
+                ? "Primero debe cargar la hoja de Aladdin."
+                : "Primero debe agregar y seleccionar " +
+                  "una hoja del personaje nuevo.",
+            "Hoja no cargada",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Warning);
+    }
 
     private void UpdateInformation(
         SheetSide side)
     {
         SpriteSheetDocument? document =
-            GetDocument(
-                side);
+            GetDocument(side);
 
         Label informationLabel =
-            side ==
-            SheetSide.Aladdin
+            side == SheetSide.Aladdin
                 ? _aladdinInfoLabel
                 : _replacementInfoLabel;
 
@@ -1087,8 +1395,7 @@ public sealed class CharacterReplacementForm :
         }
 
         string additionalInformation =
-            side ==
-            SheetSide.Replacement
+            side == SheetSide.Replacement
                 ? $"\nHojas disponibles: " +
                   $"{_replacementDocuments.Count}"
                 : string.Empty;
@@ -1106,18 +1413,11 @@ public sealed class CharacterReplacementForm :
             additionalInformation;
     }
 
-    // =========================================================
-    // CERRAR
-    // =========================================================
-
     protected override void OnFormClosed(
         FormClosedEventArgs e)
     {
-        _aladdinPreview.Document =
-            null;
-
-        _replacementPreview.Document =
-            null;
+        _aladdinPreview.Document = null;
+        _replacementPreview.Document = null;
 
         _aladdinDocument?.Dispose();
 
@@ -1130,7 +1430,6 @@ public sealed class CharacterReplacementForm :
         _replacementDocuments.Clear();
         _replacementSheetCombo.Items.Clear();
 
-        base.OnFormClosed(
-            e);
+        base.OnFormClosed(e);
     }
 }
