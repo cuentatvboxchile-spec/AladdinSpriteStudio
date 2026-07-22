@@ -1,3 +1,4 @@
+using AladdinSpriteStudio.UI.CharacterReplacement.UI;
 using AladdinSpriteStudio.UI.Controls;
 using AladdinSpriteStudio.UI.Core;
 using AladdinSpriteStudio.UI.Graphics;
@@ -77,7 +78,9 @@ public partial class MainForm : Form
             Text = "Tile individual",
             AutoSize = true,
             Location = new Point(24, 16),
-            Font = new Font(Font, FontStyle.Bold)
+            Font = new Font(
+                Font,
+                FontStyle.Bold)
         };
 
         // =====================================================
@@ -101,7 +104,9 @@ public partial class MainForm : Form
             Text = "Hoja de tiles (16 × 16)",
             AutoSize = true,
             Location = new Point(24, 325),
-            Font = new Font(Font, FontStyle.Bold)
+            Font = new Font(
+                Font,
+                FontStyle.Bold)
         };
 
         mainSplitContainer.Panel2.Controls.Add(
@@ -163,7 +168,8 @@ public partial class MainForm : Form
         FlowLayoutPanel tileNavigationPanel = new()
         {
             AutoSize = true,
-            FlowDirection = FlowDirection.LeftToRight,
+            FlowDirection =
+                FlowDirection.LeftToRight,
             WrapContents = false
         };
 
@@ -210,7 +216,8 @@ public partial class MainForm : Form
         FlowLayoutPanel paletteButtonsPanel = new()
         {
             AutoSize = true,
-            FlowDirection = FlowDirection.TopDown,
+            FlowDirection =
+                FlowDirection.TopDown,
             WrapContents = false
         };
 
@@ -306,7 +313,8 @@ public partial class MainForm : Form
         FlowLayoutPanel sheetNavigationPanel = new()
         {
             AutoSize = true,
-            FlowDirection = FlowDirection.TopDown,
+            FlowDirection =
+                FlowDirection.TopDown,
             WrapContents = false
         };
 
@@ -324,13 +332,15 @@ public partial class MainForm : Form
         {
             Dock = DockStyle.Top,
             AutoSize = true,
-            FlowDirection = FlowDirection.TopDown,
+            FlowDirection =
+                FlowDirection.TopDown,
             WrapContents = false,
             Padding = new Padding(12)
         };
 
         controlsPanel.Controls.Add(
-            CreateSectionLabel("Tile individual"));
+            CreateSectionLabel(
+                "Tile individual"));
 
         controlsPanel.Controls.Add(
             CreateNormalLabel(
@@ -441,6 +451,10 @@ public partial class MainForm : Form
 
     private void BuildMenu()
     {
+        // =====================================================
+        // MENÚ ARCHIVO
+        // =====================================================
+
         ToolStripMenuItem archivo =
             new("Archivo");
 
@@ -451,16 +465,19 @@ public partial class MainForm : Form
             new("Importar paleta .pal");
 
         ToolStripMenuItem importarPagina =
-            new("Importar página PNG en copia de la ROM...");
+            new(
+                "Importar página PNG en copia de la ROM...");
 
         ToolStripMenuItem exportarPagina =
             new("Exportar página actual...");
 
         ToolStripMenuItem exportarPaginas =
-            new("Exportar todas las páginas de Aladdin...");
+            new(
+                "Exportar todas las páginas de Aladdin...");
 
         ToolStripMenuItem exportarBloque =
-            new("Exportar bloque completo de Aladdin...");
+            new(
+                "Exportar bloque completo de Aladdin...");
 
         abrirRom.Click +=
             AbrirRom_Click;
@@ -504,8 +521,31 @@ public partial class MainForm : Form
         archivo.DropDownItems.Add(
             exportarBloque);
 
+        // =====================================================
+        // MENÚ HERRAMIENTAS
+        // =====================================================
+
+        ToolStripMenuItem herramientas =
+            new("Herramientas");
+
+        ToolStripMenuItem reemplazarPersonaje =
+            new("Reemplazar personaje...");
+
+        reemplazarPersonaje.Click +=
+            OpenCharacterReplacement_Click;
+
+        herramientas.DropDownItems.Add(
+            reemplazarPersonaje);
+
+        // =====================================================
+        // AGREGAR MENÚS
+        // =====================================================
+
         _menu.Items.Add(
             archivo);
+
+        _menu.Items.Add(
+            herramientas);
     }
 
     // =========================================================
@@ -667,6 +707,7 @@ public partial class MainForm : Form
         using OpenFileDialog dialog = new()
         {
             Title = "Importar archivo de paleta",
+
             Filter =
                 "Archivos de paleta (*.pal)|*.pal|" +
                 "Todos los archivos (*.*)|*.*"
@@ -1035,13 +1076,17 @@ public partial class MainForm : Form
         using OpenFileDialog pngDialog = new()
         {
             Title =
-                $"Seleccionar página PNG para 0x{startOffset:X}",
+                $"Seleccionar página PNG para " +
+                $"0x{startOffset:X}",
 
             Filter =
                 "Imagen PNG (*.png)|*.png",
 
-            CheckFileExists = true,
-            Multiselect = false
+            CheckFileExists =
+                true,
+
+            Multiselect =
+                false
         };
 
         if (pngDialog.ShowDialog() !=
@@ -1085,8 +1130,11 @@ public partial class MainForm : Form
             DefaultExt =
                 originalExtension.TrimStart('.'),
 
-            AddExtension = true,
-            OverwritePrompt = true
+            AddExtension =
+                true,
+
+            OverwritePrompt =
+                true
         };
 
         if (romDialog.ShowDialog() !=
@@ -1112,7 +1160,7 @@ public partial class MainForm : Form
             {
                 MessageBox.Show(
                     "No puede sobrescribir la ROM original.\n\n" +
-                    "Seleccione otro nombre para la copia modificada.",
+                    "Seleccione otro nombre para la copia.",
                     "Protección de la ROM original",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
@@ -1218,12 +1266,23 @@ public partial class MainForm : Form
 
         using SaveFileDialog dialog = new()
         {
-            Title = "Exportar página de tiles",
-            Filter = "Imagen PNG (*.png)|*.png",
-            DefaultExt = "png",
-            AddExtension = true,
-            FileName = defaultFileName,
-            OverwritePrompt = true
+            Title =
+                "Exportar página de tiles",
+
+            Filter =
+                "Imagen PNG (*.png)|*.png",
+
+            DefaultExt =
+                "png",
+
+            AddExtension =
+                true,
+
+            FileName =
+                defaultFileName,
+
+            OverwritePrompt =
+                true
         };
 
         if (dialog.ShowDialog() !=
@@ -1268,7 +1327,8 @@ public partial class MainForm : Form
 
             statusLabelMain.Text =
                 $"Página exportada | " +
-                $"0x{startOffset:X}–0x{finalOffset:X} | " +
+                $"0x{startOffset:X}–" +
+                $"0x{finalOffset:X} | " +
                 $"{exportedTiles:N0} tiles";
         }
         catch (Exception ex)
@@ -1361,8 +1421,11 @@ public partial class MainForm : Form
                 ""
             ];
 
-            int exportedPageCount = 0;
-            int exportedTileCount = 0;
+            int exportedPageCount =
+                0;
+
+            int exportedTileCount =
+                0;
 
             for (int pageStartOffset =
                      blockStartOffset;
@@ -1421,6 +1484,7 @@ public partial class MainForm : Form
                         pageEndOffsetExclusive);
 
                 exportedPageCount++;
+
                 exportedTileCount +=
                     exportedTiles;
 
@@ -1438,6 +1502,7 @@ public partial class MainForm : Form
                     "Aladdin_Pages_Manifest.txt");
 
             manifestLines.Add("");
+
             manifestLines.Add(
                 $"Páginas exportadas: " +
                 $"{exportedPageCount}");
@@ -1455,9 +1520,12 @@ public partial class MainForm : Form
 
             MessageBox.Show(
                 $"Exportación completada correctamente.\n\n" +
-                $"Páginas exportadas: {exportedPageCount}\n" +
-                $"Tiles exportados: {exportedTileCount:N0}\n" +
-                $"Archivos generados: {generatedFileCount}\n\n" +
+                $"Páginas exportadas: " +
+                $"{exportedPageCount}\n" +
+                $"Tiles exportados: " +
+                $"{exportedTileCount:N0}\n" +
+                $"Archivos generados: " +
+                $"{generatedFileCount}\n\n" +
                 $"Carpeta:\n{outputDirectory}\n\n" +
                 $"Manifiesto:\n{manifestPath}",
                 "Páginas exportadas",
@@ -1589,6 +1657,33 @@ public partial class MainForm : Form
             MessageBox.Show(
                 ex.Message,
                 "Error al exportar los tiles",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
+
+    // =========================================================
+    // ASISTENTE DE REEMPLAZO DE PERSONAJE
+    // =========================================================
+
+    private void OpenCharacterReplacement_Click(
+        object? sender,
+        EventArgs e)
+    {
+        try
+        {
+            using CharacterReplacementForm form =
+                new();
+
+            form.ShowDialog(
+                this);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                this,
+                ex.Message,
+                "Error al abrir el asistente",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
         }
