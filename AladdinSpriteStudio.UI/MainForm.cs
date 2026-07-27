@@ -1672,7 +1672,7 @@ public partial class MainForm : Form
     {
         try
         {
-            using CharacterReplacementForm form =
+            using AladdinSpriteStudio.UI.CharacterReplacement.UI.CharacterReplacementForm form =
                 new();
 
             form.ShowDialog(
